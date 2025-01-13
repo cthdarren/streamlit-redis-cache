@@ -914,6 +914,17 @@ function DataFrame({
                 : undefined,
             }),
           }}
+          // provideEditor={(cell: GridCell) => {
+          //   if (cell.kind === GridCellKind.Text) {
+          //     console.log("provideEditor", cell.data)
+          //     return isMaybeJson(cell.data)
+          //       ? ({
+          //           editor: JsonCellEditor,
+          //         } as unknown)
+          //       : undefined
+          //   }
+          //   return undefined
+          // }}
           // Apply custom rendering (e.g. for missing or required cells):
           drawCell={drawCell}
           // Add support for additional cells:

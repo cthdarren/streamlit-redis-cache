@@ -327,6 +327,20 @@ export function toSafeArray(data: any): any[] {
 }
 
 /**
+ * Efficient check to determine if a string is looks like a JSON string.
+ *
+ * This is only a heuristic check and does not guarantee that the string is a
+ * valid JSON string.
+ *
+ * @param data - The data to check.
+ *
+ * @returns `true` if the data might be a JSON string.
+ */
+export function isMaybeJson(data: any): boolean {
+  return data && data.startsWith("{") && data.endsWith("}")
+}
+
+/**
  * Converts the given value of unknown type to a string without
  * the risks of any exceptions.
  *

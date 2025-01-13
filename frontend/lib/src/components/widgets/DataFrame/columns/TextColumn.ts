@@ -21,10 +21,12 @@ import {
   notNullOrUndefined,
 } from "@streamlit/lib/src/util/utils"
 
+import { JsonCell } from "./cells/JsonCell"
 import {
   BaseColumn,
   BaseColumnProps,
   getErrorCell,
+  isMaybeJson,
   removeLineBreaks,
   toSafeString,
 } from "./utils"
@@ -128,6 +130,23 @@ function TextColumn(props: BaseColumnProps): BaseColumn {
         const displayData = notNullOrUndefined(cellData)
           ? removeLineBreaks(cellData) // Remove line breaks to show all content in the cell
           : ""
+
+        if (!props.isEditable && isMaybeJson(cellData)) {
+          return {
+            kind: GridCellKind.Custom,
+            readonly: true,
+            isMissingValue: isNullOrUndefined(cellData),
+            allowOverlay: cellTemplate.allowOverlay,
+            contentAlign: cellTemplate.contentAlign,
+            style: cellTemplate.style,
+            copyData: cellData,
+            data: {
+              kind: "json-cell",
+              value: cellData,
+            },
+          } as JsonCell
+        }
+
         return {
           ...cellTemplate,
           isMissingValue: isNullOrUndefined(cellData),
@@ -142,7 +161,11 @@ function TextColumn(props: BaseColumnProps): BaseColumn {
         )
       }
     },
-    getCellValue(cell: TextCell): string | null {
+    getCellValue(cell: TextCell | JsonCell): string | null {
+      if (cell.kind === GridCellKind.Custom) {
+        return cell.copyData
+      }
+
       return cell.data === undefined ? null : cell.data
     },
   }
