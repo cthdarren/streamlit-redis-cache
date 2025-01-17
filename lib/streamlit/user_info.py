@@ -57,20 +57,19 @@ def login(provider: str | None = None) -> None:
     remove the user's information from ``st.experimental_user`` and start a new
     session.
 
-    You can use any OpenID Connect (OIDC) provider, including GitHub, Google,
+    You can use any OpenID Connect (OIDC) provider, including Google,
     Microsoft, Okta, and more. You must configure the provider through secrets
     management. Although OIDC is an extension of OAuth 2.0, you can't use
-    generic OAuth providers. Furthermore, you can only access the user's
-    identity information and not their underlying OAuth token. Therefore, this
-    command will not allow your app to act on behalf of a user in a secure
-    system.
+    generic OAuth providers. You can only access the user's identity
+    information and not their underlying OAuth token. Therefore, this command
+    will not allow your app to act on behalf of a user in a secure system.
 
     For all providers, there are two common settings, ``auth.redirect_uri`` and
     ``auth.cookie_secret``, which you must specify in the ``[auth]`` dictionary
     in ``secrets.toml``. Other settings must be defined as described in the
     ``provider`` parameter.
 
-    - ``auth.redirect_uri`` is your app's URL with the pathname
+    - ``auth.redirect_uri`` is your app's absolute URL with the pathname
       ``/oauth2callback``.
     - ``auth.cookie_secret`` should be a strong, randomly generated secret.
 
@@ -78,7 +77,8 @@ def login(provider: str | None = None) -> None:
         - You must install ``Authlib>=1.3.2`` to use this command.
         - Your authentication configuration is dependent on your host location.
           When you deploy your app, remember to update your ``redirect_uri``
-          both within your app and within your provider.
+          both within your app and within your provider. You must use an
+          absolute URL.
         - Streamlit will automatically enable CORS and XSRF protection when you
           use ``st.login()``, overriding configuration options in
           ``config.toml``.
@@ -172,43 +172,53 @@ def login(provider: str | None = None) -> None:
 
     If you want to give your users a choice of authentication methods,
     configure multiple providers and give them each a unique name. The
-    following example offers users the opportunity to log in through Okta or
-    Auth0.
+    following example lets users choose between Okta and Microsoft to log in.
+    Always check with your identity provider to understand the structure of
+    their identity tokens because the returned fields may be different.
+    Remember to set ``{tenant}`` and ``{subdomain}`` in ``server_metadata_url``
+    for Microsoft and Okta, respectively.
 
     >>> [auth]
     >>> redirect_uri = "http://localhost:8501/oauth2callback"
     >>> cookie_secret = "xxx"
     >>>
+    >>> [auth.microsoft]
+    >>> client_id = "xxx"
+    >>> client_secret = "xxx"
+    >>> server_metadata_url = "https://login.microsoftonline.com/{tenant}/v2.0/.well-known/openid-configuration"
+    >>>
     >>> [auth.okta]
     >>> client_id = "xxx"
     >>> client_secret = "xxx"
-    >>> server_metadata_url = "https://{subdomain}.okta.com/oauth2/default/.well-known/openid-configuration"
-    >>>
-    >>> [auth.auth0]
-    >>> client_id = "xxx"
-    >>> client_secret = "xxx"
     >>> server_metadata_url = (
-    ...     "{account}.{region}.auth0.com/.well-known/openid-configuration"
+    ...     "https://{subdomain}.okta.com/.well-known/openid-configuration"
     ... )
 
     Your app code:
 
     >>> import streamlit as st
-    >>> if st.button("Internal login"):
-    >>>     st.login("okta")
-    >>> if st.button("External login"):
-    >>>     st.login("auth0")
-    >>> if st.experimental_user.is_logged_in:
-    >>>     st.write(f"Hello, {st.experimental_user.name}!)
+    >>> if not st.experimental_user.is_logged_in:
+    >>>     st.header("Log in:")
+    >>>     if st.button("Microsoft"):
+    >>>         st.login("microsoft")
+    >>>     if st.button("Okta"):
+    >>>         st.login("okta")
+    >>> else:
+    >>>     if st.button("Log out"):
+    >>>         st.logout()
+    >>>     st.write(f"Hello, {st.experimental_user.name}!")
 
     **Examplt 4: Change the default connection settings**
 
     By default, Streamlit sets ``scope="openid profile email"`` and
     ``prompt="select_account"``. You can change these and other OIDC parameters
-    by defining ``client_kwargs``. For more information about OIDC parameters,
-    see `OpenID Connect Core
+    by passing a dictionary of settings to ``client_kwargs``. For more
+    information about OIDC parameters, see `OpenID Connect Core
     <https://openid.net/specs/openid-connect-core-1_0.html#AuthRequest>`_ and
-    your provider's documentation.
+    your provider's documentation. For example, Auth0 does not recognize the
+    ``select_account`` prompt. For the equivalent behavior, you need to use
+    ``login`` as described in Auth0's `Customize Signup and Login Prompts
+    <https://auth0.com/docs/customize/login-pages/universal-login/customize-signup-and-login-prompts>`_.
 
     ``.streamlit/secrets.toml``:
 
@@ -216,24 +226,23 @@ def login(provider: str | None = None) -> None:
     >>> redirect_uri = "http://localhost:8501/oauth2callback"
     >>> cookie_secret = "xxx"
     >>>
-    >>> [auth.google]
+    >>> [auth.auth0]
     >>> client_id = "xxx"
     >>> client_secret = "xxx"
     >>> server_metadata_url = (
-    ...     "https://accounts.google.com/.well-known/openid-configuration"
+    ...     "https://{account}.{region}.auth0.com/.well-known/openid-configuration"
     ... )
-    >>> client_kwargs = {
-            "prompt" = "select_account consent",
-            "scope" = "openid profile"
-        }
+    >>> client_kwargs = { "prompt" = "login" }
 
     Your app code:
 
     >>> import streamlit as st
-    >>> if not st.experimental_user.is_logged_in:
-    >>>     st.login("google")
-    >>> else:
-    >>>     st.write(f"Hello, {st.experimental_user.name}!")
+    >>> if st.button("Log in"):
+    >>>     st.login("auth0")
+    >>> if st.experimental_user.is_logged_in:
+    >>>     if st.button("Log out"):
+    >>>         st.logout()
+    >>>     st.write(f"Hello, {st.experimental_user.name}!)
 
     """
     if provider is None:
