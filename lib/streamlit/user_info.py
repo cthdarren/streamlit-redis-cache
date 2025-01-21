@@ -57,20 +57,22 @@ def login(provider: str | None = None) -> None:
     remove the user's information from ``st.experimental_user`` and start a new
     session.
 
-    You can use any OpenID Connect (OIDC) provider, including Google,
-    Microsoft, Okta, and more. You must configure the provider through secrets
-    management. Although OIDC is an extension of OAuth 2.0, you can't use
-    generic OAuth providers. You can only access the user's identity
-    information and not their underlying OAuth token. Therefore, this command
-    will not allow your app to act on behalf of a user in a secure system.
+    You can use any OIDC provider, including Google, Microsoft, Okta, and more.
+    You must configure the provider through secrets management. Although OIDC
+    is an extension of OAuth 2.0, you can't use generic OAuth providers.
+    Streamlit parses the user's identity token and surfaces its attributes in
+    ``st.experimental_user``. No access tokens are requested or returned.
+    Therefore, this command will not allow your app to act on behalf of a user
+    in a secure system.
 
     For all providers, there are two common settings, ``auth.redirect_uri`` and
-    ``auth.cookie_secret``, which you must specify in the ``[auth]`` dictionary
+    ``auth.cookie_secret``, which you must specify in an ``[auth]`` dictionary
     in ``secrets.toml``. Other settings must be defined as described in the
     ``provider`` parameter.
 
     - ``auth.redirect_uri`` is your app's absolute URL with the pathname
-      ``/oauth2callback``.
+      ``oauth2callback``. For local development using the default port, this is
+      ``http://localhost:8501/oauth2callback``.
     - ``auth.cookie_secret`` should be a strong, randomly generated secret.
 
     .. Important::
@@ -80,8 +82,8 @@ def login(provider: str | None = None) -> None:
           both within your app and within your provider. You must use an
           absolute URL.
         - Streamlit will automatically enable CORS and XSRF protection when you
-          use ``st.login()``, overriding configuration options in
-          ``config.toml``.
+          configure authentication in ``secrets.toml``. This takes precedence
+          over configuration options in ``config.toml``.
         - For security reasons, authentication is not supported for embedded
           apps.
 
@@ -97,9 +99,16 @@ def login(provider: str | None = None) -> None:
         in the ``[auth]`` dictionary within your app's ``secrets.toml`` file.
         Otherwise, use an ``[auth.<provider>]`` dictionary for the named
         provider, as shown in the examples that follow. When you pass a string
-        to ``provider``, Streamlit will use ``auth.redirect_uri`` and
-        ``auth.cookie_secret``, while ignoring any other values in the
-        ``[auth]`` dictionary.
+        to ``provider``, Streamlit will use ``redirect_uri`` and
+        ``cookie_secret``, while ignoring any other values in the ``[auth]``
+        dictionary.
+
+        In addition to the common settings (``redirect_uri`` and
+        ``cookie_secret``), the following settings are required:
+
+        - ``client_id``
+        - ``client_secret``
+        - ``server_metadata_url``
 
     Examples
     --------
@@ -126,6 +135,7 @@ def login(provider: str | None = None) -> None:
     Your app code:
 
     >>> import streamlit as st
+    >>>
     >>> if not st.experimental_user.is_logged_in:
     >>>     if st.button("Log in"):
     >>>         st.login()
@@ -143,7 +153,7 @@ def login(provider: str | None = None) -> None:
     the provider. The example uses ``provider="microsoft"``, but you can use
     any name. This name is internal to Streamlit and used to match the login
     command to its configuration. For information about using OIDC with
-    Microsoft, `Microsoft Entra ID
+    Microsoft, see `Microsoft Entra ID
     <https://learn.microsoft.com/en-us/power-pages/security/authentication/openid-settings>`_.
     To configure your ``{tenant}`` value in ``server_metadata_url``, see
     `Microsoft identity platform
@@ -163,6 +173,7 @@ def login(provider: str | None = None) -> None:
     Your app code:
 
     >>> import streamlit as st
+    >>>
     >>> if not st.experimental_user.is_logged_in:
     >>>     st.login("microsoft")
     >>> else:
@@ -197,6 +208,7 @@ def login(provider: str | None = None) -> None:
     Your app code:
 
     >>> import streamlit as st
+    >>>
     >>> if not st.experimental_user.is_logged_in:
     >>>     st.header("Log in:")
     >>>     if st.button("Microsoft"):
@@ -263,7 +275,37 @@ def login(provider: str | None = None) -> None:
 
 @gather_metrics("logout")
 def logout() -> None:
-    """Logout the current user."""
+    """Logout the current user.
+
+    This command removes the user's information from ``st.experimental_user``
+    and redirects the user back to the home page of your app. This creates a
+    new session.
+
+    Example
+    -------
+    ``.streamlit/secrets.toml``:
+
+    >>> [auth]
+    >>> redirect_uri = "http://localhost:8501/oauth2callback"
+    >>> cookie_secret = "xxx"
+    >>> client_id = "xxx"
+    >>> client_secret = "xxx"
+    >>> server_metadata_url = (
+    ...     "https://accounts.google.com/.well-known/openid-configuration"
+    ... )
+
+    Your app code:
+
+    >>> import streamlit as st
+    >>>
+    >>> if not st.experimental_user.is_logged_in:
+    >>>     if st.button("Log in"):
+    >>>         st.login()
+    >>> else:
+    >>>     if st.button("Log out"):
+    >>>         st.logout()
+    >>>     st.write(f"Hello, {st.experimental_user.name}!")
+    """
     context = _get_script_run_ctx()
     if context is not None:
         context.user_info.clear()
@@ -305,13 +347,25 @@ class UserInfoProxy(Mapping[str, Union[str, bool, None]]):
     """
     A read-only, dict-like object for accessing information about current user.
 
-    ``st.experimental_user`` is dependent on the host platform running the
+    ``st.experimental_user`` is dependent on the host platform running your
     Streamlit app. If the host platform has not configured the function, it
     will behave as it does in a locally running app.
 
     Properties can be accessed via key or attribute notation. For example,
     ``st.experimental_user["email"]`` or ``st.experimental_user.email``.
 
+    Attributes
+    ----------
+    is_logged_in: bool
+        Whether a user is logged in. For a locally running app, this attribute
+        is only available when authentication (``st.login()``) is configured in
+        ``secrets.toml``.
+    email: str
+        The user's email. For a locally running app with authentication
+        configured in ``secrets.toml``, this attribute is available when a user
+        is logged in and their email is included in the returned identity
+        token. For a locally running app without authentication configured,
+        this attribute returns the string literal ``"test@example.com"``.
     """
 
     def __getitem__(self, key: str) -> str | bool | None:
