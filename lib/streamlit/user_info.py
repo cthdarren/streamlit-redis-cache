@@ -61,26 +61,42 @@ def login(provider: str | None = None) -> None:
     You must configure the provider through secrets management. Although OIDC
     is an extension of OAuth 2.0, you can't use generic OAuth providers.
     Streamlit parses the user's identity token and surfaces its attributes in
-    ``st.experimental_user``. No access tokens are requested or returned.
-    Therefore, this command will not allow your app to act on behalf of a user
-    in a secure system.
+    ``st.experimental_user``. If an access token is returned by the provider,
+    it is ignored. Therefore, this command will not allow your app to act on
+    behalf of a user in a secure system.
 
-    For all providers, there are two common settings, ``auth.redirect_uri`` and
-    ``auth.cookie_secret``, which you must specify in an ``[auth]`` dictionary
+    For all providers, there are two common settings, ``redirect_uri`` and
+    ``cookie_secret``, which you must specify in an ``[auth]`` dictionary
     in ``secrets.toml``. Other settings must be defined as described in the
     ``provider`` parameter.
 
-    - ``auth.redirect_uri`` is your app's absolute URL with the pathname
+    - ``redirect_uri`` is your app's absolute URL with the pathname
       ``oauth2callback``. For local development using the default port, this is
       ``http://localhost:8501/oauth2callback``.
-    - ``auth.cookie_secret`` should be a strong, randomly generated secret.
+    - ``cookie_secret`` should be a strong, randomly generated secret.
+
+    In addition to the common settings, the following settings are required:
+
+    - ``client_id``
+    - ``client_secret``
+    - ``server_metadata_url``
+
+    For a complete list of OIDC parameters, see `OpenID Connect Core
+    <https://openid.net/specs/openid-connect-core-1_0.html#AuthRequest>`_ and
+    your provider's documentation. By default, Streamlit sets
+    ``scope="openid profile email"`` and ``prompt="select_account"``. You can
+    change these and other OIDC parameters by passing a dictionary of settings
+    to ``client_kwargs``. ``state`` and ``nonce``, which are used for
+    security, are handled automatically and don't need to specified. For more
+    information, see Example 4.
 
     .. Important::
         - You must install ``Authlib>=1.3.2`` to use this command.
         - Your authentication configuration is dependent on your host location.
           When you deploy your app, remember to update your ``redirect_uri``
-          both within your app and within your provider. You must use an
-          absolute URL.
+          both within your app and within your provider.
+        - All URLs declared in the settings must be absolute (i.e. begin with
+          ``http://`` or ``https://``).
         - Streamlit will automatically enable CORS and XSRF protection when you
           configure authentication in ``secrets.toml``. This takes precedence
           over configuration options in ``config.toml``.
@@ -102,13 +118,6 @@ def login(provider: str | None = None) -> None:
         to ``provider``, Streamlit will use ``redirect_uri`` and
         ``cookie_secret``, while ignoring any other values in the ``[auth]``
         dictionary.
-
-        In addition to the common settings (``redirect_uri`` and
-        ``cookie_secret``), the following settings are required:
-
-        - ``client_id``
-        - ``client_secret``
-        - ``server_metadata_url``
 
     Examples
     --------
@@ -222,21 +231,14 @@ def login(provider: str | None = None) -> None:
 
     **Examplt 4: Change the default connection settings**
 
-    By default, Streamlit sets ``scope="openid profile email"`` and
-    ``prompt="select_account"``. You can change these and other OIDC parameters
-    by passing a dictionary of settings to ``client_kwargs``. For more
-    information about OIDC parameters, see `OpenID Connect Core
-    <https://openid.net/specs/openid-connect-core-1_0.html#AuthRequest>`_ and
-    your provider's documentation.
-
-    For example, ``prompt="select_account"`` may be treated differently by some
-    providers when a user is already logged into their account. For Google and
-    Microsoft, if a user is logged into their account in their browswer, they
-    will be prompted to select the account they want to use, even if it's the
-    only one. However, for Okta and Auth0, if the user is already logged in,
-    the account will automatically be selected. ``st.logout()`` does not remove
-    a user's identity token from their browser. To force users to log in every
-    time, use ``prompt="login"`` as described in Auth0's
+    ``prompt="select_account"`` may be treated differently by some
+    providers when a user is already logged into their account. If a user is
+    logged into their Google or Microsoft account from a previous session, the
+    provider will prompt them to select the account they want to use, even if
+    it's the only one. However, if the user is logged into their Okta or Auth0
+    account from a previous session, the account will automatically be
+    selected. ``st.logout()`` does not clear a user's related cookies. To force
+    users to log in every time, use ``prompt="login"`` as described in Auth0's
     `Customize Signup and Login Prompts
     <https://auth0.com/docs/customize/login-pages/universal-login/customize-signup-and-login-prompts>`_.
 
