@@ -97,7 +97,7 @@ def login(provider: str | None = None) -> None:
 
         If ``provider`` is ``None`` (default), Streamlit will use all settings
         in the ``[auth]`` dictionary within your app's ``secrets.toml`` file.
-        Otherwise, use an ``[auth.<provider>]`` dictionary for the named
+        Otherwise, use an ``[auth.{provider}]`` dictionary for the named
         provider, as shown in the examples that follow. When you pass a string
         to ``provider``, Streamlit will use ``redirect_uri`` and
         ``cookie_secret``, while ignoring any other values in the ``[auth]``
@@ -148,7 +148,7 @@ def login(provider: str | None = None) -> None:
 
     If you specify a name for your provider, save the common settings in the
     ``[auth]`` dictionary of your ``secrets.toml`` file, and save the other
-    settings in an ``[auth.<provider>]`` dictionary, where ``<provider>`` is
+    settings in an ``[auth.{provider}]`` dictionary, where ``{provider}`` is
     the name of your provider. The following example configures Microsoft as
     the provider. The example uses ``provider="microsoft"``, but you can use
     any name. This name is internal to Streamlit and used to match the login
