@@ -227,9 +227,17 @@ def login(provider: str | None = None) -> None:
     by passing a dictionary of settings to ``client_kwargs``. For more
     information about OIDC parameters, see `OpenID Connect Core
     <https://openid.net/specs/openid-connect-core-1_0.html#AuthRequest>`_ and
-    your provider's documentation. For example, Auth0 does not recognize the
-    ``select_account`` prompt. For the equivalent behavior, you need to use
-    ``login`` as described in Auth0's `Customize Signup and Login Prompts
+    your provider's documentation.
+
+    For example, ``prompt="select_account"`` may be treated differently by some
+    providers when a user is already logged into their account. For Google and
+    Microsoft, if a user is logged into their account in their browswer, they
+    will be prompted to select the account they want to use, even if it's the
+    only one. However, for Okta and Auth0, if the user is already logged in,
+    the account will automatically be selected. ``st.logout()`` does not remove
+    a user's identity token from their browser. To force users to log in every
+    time, use ``prompt="login"`` as described in Auth0's
+    `Customize Signup and Login Prompts
     <https://auth0.com/docs/customize/login-pages/universal-login/customize-signup-and-login-prompts>`_.
 
     ``.streamlit/secrets.toml``:
@@ -280,6 +288,10 @@ def logout() -> None:
     This command removes the user's information from ``st.experimental_user``
     and redirects the user back to the home page of your app. This creates a
     new session.
+
+    .. Note::
+        This does not log the user out of their underlying account from the
+        identity provider.
 
     Example
     -------
@@ -345,27 +357,113 @@ def _get_user_info() -> UserInfo:
 
 class UserInfoProxy(Mapping[str, Union[str, bool, None]]):
     """
-    A read-only, dict-like object for accessing information about current user.
+    A read-only, dict-like object for accessing information about the current
+    user.
 
     ``st.experimental_user`` is dependent on the host platform running your
     Streamlit app. If the host platform has not configured the function, it
     will behave as it does in a locally running app.
 
-    Properties can be accessed via key or attribute notation. For example,
-    ``st.experimental_user["email"]`` or ``st.experimental_user.email``.
+    When authentication is configured in ``secrets.toml``, Streamlit will parse
+    the OpenID Connect (OIDC) identity token and copy the attributes to
+    ``st.experimental_user``. Check your provider's documentation for their
+    available attributes (known as claims).
+
+    When authentication is not configured, ``st.experimental_user`` has no
+    attributes.
+
+    Values can be accessed via key or attribute notation. For example, use
+    ``st.experimental_user["email"]`` or ``st.experimental_user.email`` to
+    access the ``email`` attribute.
+
+    .. Important::
+        Identity tokens include an issuance and expiration time. Streamlit does
+        not implicitly check these. If you want to automatically expire a
+        user's authentication, check these values manually and programmatically
+        log out your user (``st.logout()``) when needed.
 
     Attributes
     ----------
     is_logged_in: bool
         Whether a user is logged in. For a locally running app, this attribute
         is only available when authentication (``st.login()``) is configured in
-        ``secrets.toml``.
-    email: str
-        The user's email. For a locally running app with authentication
-        configured in ``secrets.toml``, this attribute is available when a user
-        is logged in and their email is included in the returned identity
-        token. For a locally running app without authentication configured,
-        this attribute returns the string literal ``"test@example.com"``.
+        ``secrets.toml``. Otherwise, it does not exist.
+
+    Examples
+    --------
+    **Example 1: Google's identity token**
+
+    If you configure a basic Google OIDC connection as shown in Example 1 of
+    ``st.login()``, the following data is available in
+    ``st.experimental_user``. Streamlit adds the ``is_logged_in`` attribute.
+    Additional attributes may be available depending on the configuration of
+    the user's Google account. For more information about Google's identity
+    tokens, see `Obtain user information from the ID token
+    <https://developers.google.com/identity/openid-connect/openid-connect#obtainuserinfo>`_
+    in Google's docs.
+
+    Your app code:
+
+    >>> import streamlit as st
+    >>>
+    >>> if st.experimental_user.is_logged_in:
+    >>>     st.write(st.experimental_user)
+
+    Displayed data when a user is logged in:
+
+    >>> {
+    >>>     "is_logged_in":true
+    >>>     "iss":"https://accounts.google.com"
+    >>>     "azp":"{client_id}.apps.googleusercontent.com"
+    >>>     "aud":"{client_id}.apps.googleusercontent.com"
+    >>>     "sub":"{unique_user_id}"
+    >>>     "email":"{user}@gmail.com"
+    >>>     "email_verified":true
+    >>>     "at_hash":"{access_token_hash}"
+    >>>     "nonce":"{nonce_string}"
+    >>>     "name":"{full_name}"
+    >>>     "picture":"https://lh3.googleusercontent.com/a/{content_path}"
+    >>>     "given_name":"{given_name}"
+    >>>     "family_name":"{family_name}"
+    >>>     "iat":{issued_time}
+    >>>     "exp":{expiration_time}
+    >>> }
+
+    **Example 2: Microsoft's identity token**
+
+    If you configure a basic Microsoft OIDC connection as shown in Example 2 of
+    ``st.login()``, the following data is available in
+    ``st.experimental_user``. For more information about Microsoft's identity
+    tokens, see `ID token claims reference
+    <https://learn.microsoft.com/en-us/entra/identity-platform/id-token-claims-reference>`_
+    in Microsoft's docs.
+
+    Your app code:
+
+    >>> import streamlit as st
+    >>>
+    >>> if st.experimental_user.is_logged_in:
+    >>>     st.write(st.experimental_user)
+
+    Displayed data when a user is logged in:
+
+    >>> {
+    >>>     "is_logged_in":true
+    >>>     "ver":"2.0"
+    >>>     "iss":"https://login.microsoftonline.com/{tenant_id}/v2.0"
+    >>>     "sub":"{application_user_id}"
+    >>>     "aud":"{application_id}"
+    >>>     "exp":{expiration_time}
+    >>>     "iat":{issued_time}
+    >>>     "nbf":{start_time}
+    >>>     "name":"{full_name}"
+    >>>     "preferred_username":"{username}"
+    >>>     "oid":"{user_GUID}"
+    >>>     "email":"{email}"
+    >>>     "tid":"{tenant_id}"
+    >>>     "nonce":"{nonce_string}"
+    >>>     "aio":"{opaque_string}"
+    >>> }
     """
 
     def __getitem__(self, key: str) -> str | bool | None:
