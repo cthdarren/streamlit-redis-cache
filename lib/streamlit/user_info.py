@@ -229,7 +229,7 @@ def login(provider: str | None = None) -> None:
     >>>         st.logout()
     >>>     st.write(f"Hello, {st.experimental_user.name}!")
 
-    **Examplt 4: Change the default connection settings**
+    **Example 4: Change the default connection settings**
 
     ``prompt="select_account"`` may be treated differently by some
     providers when a user is already logged into their account. If a user is
