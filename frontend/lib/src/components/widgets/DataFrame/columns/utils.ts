@@ -31,7 +31,7 @@ import "moment-timezone"
 import numbro from "numbro"
 import { sprintf } from "sprintf-js"
 
-import { PandasColumnType as ArrowType } from "@streamlit/lib/src/dataframes/arrowTypeUtils"
+import { ArrowType } from "@streamlit/lib/src/dataframes/arrowTypeUtils"
 import { EmotionTheme } from "@streamlit/lib/src/theme"
 import {
   isNullOrUndefined,
@@ -233,6 +233,7 @@ export function toGlideColumn(column: BaseColumn): GridColumn {
     id: column.id,
     title: column.title,
     hasMenu: false,
+    menuIcon: "dots",
     themeOverride: column.themeOverride,
     icon: column.icon,
     group: column.group,
