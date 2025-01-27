@@ -73,6 +73,7 @@ import { StyledResizableContainer } from "./styled-components"
 
 import "@glideapps/glide-data-grid/dist/index.css"
 import "@glideapps/glide-data-grid-cells/dist/index.css"
+import ColumnVisibilityMenu from "./ColumnVisibilityMenu"
 
 // Debounce time for triggering a widget state update
 // This prevents rapid updates to the widget state.
@@ -220,12 +221,11 @@ function DataFrame({
 
   const [columnOrder, setColumnOrder] = React.useState(element.columnOrder)
 
-  const { columns: originalColumns, setColumnConfigMapping } = useColumnLoader(
-    element,
-    data,
-    disabled,
-    columnOrder
-  )
+  const {
+    columns: originalColumns,
+    allColumns,
+    setColumnConfigMapping,
+  } = useColumnLoader(element, data, disabled, columnOrder)
 
   /**
    * On the first rendering, try to load initial widget state if
@@ -645,6 +645,38 @@ function DataFrame({
     }, 1)
   }, [resizableSize, numRows, glideColumns])
 
+  const hideColumn = React.useCallback(
+    (columnId: string) => {
+      setColumnConfigMapping(prevColumnConfigMapping => {
+        const newColumnConfigMapping = new Map(prevColumnConfigMapping)
+        const existingConfig = newColumnConfigMapping.get(columnId)
+        newColumnConfigMapping.set(columnId, {
+          ...(existingConfig || {}),
+          hidden: true,
+        })
+        return newColumnConfigMapping
+      })
+      clearSelection(true, false)
+    },
+    [clearSelection, setColumnConfigMapping]
+  )
+
+  const showColumn = React.useCallback(
+    (columnId: string) => {
+      setColumnConfigMapping(prevColumnConfigMapping => {
+        const newColumnConfigMapping = new Map(prevColumnConfigMapping)
+        const existingConfig = newColumnConfigMapping.get(columnId)
+        newColumnConfigMapping.set(columnId, {
+          ...(existingConfig || {}),
+          hidden: false,
+        })
+        return newColumnConfigMapping
+      })
+      clearSelection(true, false)
+    },
+    [clearSelection, setColumnConfigMapping]
+  )
+
   return (
     <StyledResizableContainer
       className="stDataFrame"
@@ -708,6 +740,15 @@ function DataFrame({
         onCollapse={collapse}
         target={StyledResizableContainer}
       >
+        {!isEmptyTable && allColumns.length > columns.length && (
+          // Only show the columns menu if there are more columns than the current
+          // visible columns
+          <ColumnVisibilityMenu
+            columns={allColumns}
+            hideColumn={hideColumn}
+            showColumn={showColumn}
+          />
+        )}
         {((isRowSelectionActivated && isRowSelected) ||
           (isColumnSelectionActivated && isColumnSelected)) && (
           // Add clear selection action if selections are active
@@ -1065,6 +1106,9 @@ function DataFrame({
           }}
           onPinColumn={() => {
             pinColumn(originalColumns[showMenu.columnIdx].id)
+          }}
+          onHideColumn={() => {
+            hideColumn(originalColumns[showMenu.columnIdx].id)
           }}
         ></ColumnMenu>
       )}

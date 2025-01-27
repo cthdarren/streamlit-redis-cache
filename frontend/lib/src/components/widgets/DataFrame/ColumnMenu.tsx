@@ -44,6 +44,8 @@ export interface ColumnMenuProps {
   onPinColumn: () => void
   // Callback to unpin the column
   onUnpinColumn: () => void
+  // Callback to hide the column
+  onHideColumn: () => void
 }
 
 /**
@@ -57,6 +59,7 @@ function ColumnMenu({
   onUnpinColumn,
   onCloseMenu,
   onSortColumn,
+  onHideColumn,
 }: ColumnMenuProps): ReactElement {
   const theme: EmotionTheme = useTheme()
   const { colors, fontSizes, radii, fontWeights } = theme
@@ -159,6 +162,20 @@ function ColumnMenu({
               Pin column
             </StyledMenuListItem>
           )}
+          <StyledMenuListItem
+            onClick={() => {
+              onHideColumn()
+              closeMenu()
+            }}
+          >
+            <DynamicIcon
+              size={"base"}
+              margin="0"
+              color="inherit"
+              iconValue=":material/visibility_off:"
+            />
+            Hide column
+          </StyledMenuListItem>
         </StyledMenuList>
       }
       placement={PLACEMENT.bottomRight}

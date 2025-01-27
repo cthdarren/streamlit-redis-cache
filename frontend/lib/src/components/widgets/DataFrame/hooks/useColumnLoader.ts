@@ -221,7 +221,11 @@ export function getColumnConfig(configJson: string): Map<string, any> {
 }
 
 type ColumnLoaderReturn = {
+  // All the visible columns:
   columns: BaseColumn[]
+  // All the columns of the dataframe, including hidden ones:
+  allColumns: BaseColumn[]
+  // Callback to set the column config state:
   setColumnConfigMapping: React.Dispatch<
     React.SetStateAction<Map<string, any>>
   >
@@ -296,58 +300,67 @@ function useColumnLoader(
     (notNullOrUndefined(element.width) && element.width > 0)
 
   // Converts the columns from Arrow into columns compatible with glide-data-grid
+  const allColumns: BaseColumn[] = React.useMemo(() => {
+    return initAllColumnsFromArrow(data).map(column => {
+      // Apply column configurations
+      let updatedColumn = {
+        ...column,
+        ...applyColumnConfig(column, columnConfigMapping),
+        isStretched: stretchColumns,
+      } as BaseColumnProps
+      const ColumnType = getColumnType(updatedColumn)
+
+      // Make sure editing is deactivated if the column is read-only, disabled,
+      // or a not editable type.
+      if (
+        element.editingMode === ArrowProto.EditingMode.READ_ONLY ||
+        disabled ||
+        ColumnType.isEditableType === false
+      ) {
+        updatedColumn = {
+          ...updatedColumn,
+          isEditable: false,
+        }
+      }
+
+      if (
+        element.editingMode !== ArrowProto.EditingMode.READ_ONLY &&
+        updatedColumn.isEditable == true
+      ) {
+        // Set editable icon for all editable columns:
+        updatedColumn = {
+          ...updatedColumn,
+          icon: "editable",
+        }
+
+        // Make sure that required columns are not hidden when editing mode is dynamic:
+        if (
+          updatedColumn.isRequired &&
+          element.editingMode === ArrowProto.EditingMode.DYNAMIC
+        ) {
+          updatedColumn = {
+            ...updatedColumn,
+            isHidden: false,
+          }
+        }
+      }
+
+      return ColumnType(updatedColumn, theme)
+    })
+  }, [
+    data,
+    columnConfigMapping,
+    stretchColumns,
+    element.editingMode,
+    disabled,
+    theme,
+  ])
+
   const columns: BaseColumn[] = React.useMemo(() => {
-    const visibleColumns = initAllColumnsFromArrow(data)
-      .map(column => {
-        // Apply column configurations
-        let updatedColumn = {
-          ...column,
-          ...applyColumnConfig(column, columnConfigMapping),
-          isStretched: stretchColumns,
-        } as BaseColumnProps
-        const ColumnType = getColumnType(updatedColumn)
-
-        // Make sure editing is deactivated if the column is read-only, disabled,
-        // or a not editable type.
-        if (
-          element.editingMode === ArrowProto.EditingMode.READ_ONLY ||
-          disabled ||
-          ColumnType.isEditableType === false
-        ) {
-          updatedColumn = {
-            ...updatedColumn,
-            isEditable: false,
-          }
-        }
-
-        if (
-          element.editingMode !== ArrowProto.EditingMode.READ_ONLY &&
-          updatedColumn.isEditable == true
-        ) {
-          // Set editable icon for all editable columns:
-          updatedColumn = {
-            ...updatedColumn,
-            icon: "editable",
-          }
-
-          // Make sure that required columns are not hidden when editing mode is dynamic:
-          if (
-            updatedColumn.isRequired &&
-            element.editingMode === ArrowProto.EditingMode.DYNAMIC
-          ) {
-            updatedColumn = {
-              ...updatedColumn,
-              isHidden: false,
-            }
-          }
-        }
-
-        return ColumnType(updatedColumn, theme)
-      })
-      .filter(column => {
-        // Filter out all columns that are hidden
-        return !column.isHidden
-      })
+    const visibleColumns = allColumns.filter(column => {
+      // Filter out all columns that are hidden
+      return !column.isHidden
+    })
 
     const pinnedColumns: BaseColumn[] = []
     const unpinnedColumns: BaseColumn[] = []
@@ -402,18 +415,11 @@ function useColumnLoader(
     return orderedColumns.length > 0
       ? orderedColumns
       : [ObjectColumn(initEmptyIndexColumn())]
-  }, [
-    data,
-    columnConfigMapping,
-    stretchColumns,
-    disabled,
-    element.editingMode,
-    columnOrder,
-    theme,
-  ])
+  }, [columnOrder, allColumns])
 
   return {
     columns,
+    allColumns,
     setColumnConfigMapping,
   }
 }
