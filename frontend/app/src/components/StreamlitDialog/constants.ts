@@ -14,5 +14,13 @@
  * limitations under the License.
  */
 
-/// <reference types="vite/client" />
-/// <reference types="vitest/globals" />
+export enum DialogType {
+  ABOUT = "about",
+  CLEAR_CACHE = "clearCache",
+  SETTINGS = "settings",
+  SCRIPT_COMPILE_ERROR = "scriptCompileError",
+  THEME_CREATOR = "themeCreator",
+  WARNING = "warning",
+  DEPLOY_ERROR = "deployError",
+  DEPLOY_DIALOG = "deployDialog",
+}

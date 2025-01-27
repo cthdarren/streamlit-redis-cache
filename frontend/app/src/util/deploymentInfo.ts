@@ -14,16 +14,9 @@
  * limitations under the License.
  */
 
-declare module "@loaders.gl/core"
-
-declare module "@loaders.gl/csv"
-
-declare module "@loaders.gl/gltf"
-
-declare module "native-file-system-adapter"
-
-declare module "fzy.js" {
-  export function score(pattern: string, subject: string): number
-  export function positions(pattern: string, subject: string): Array<number>
-  export function hasMatch(pattern: string, subject: string): boolean
+export const isLocalhost = (): boolean => {
+  return (
+    window.location.hostname === "localhost" ||
+    window.location.hostname === "127.0.0.1"
+  )
 }
