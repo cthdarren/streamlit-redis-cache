@@ -122,7 +122,7 @@ def _mpa_v1(main_script_path: str):
     import streamlit as st
 
     # Select the folder that should be used for the pages:
-    PAGES_FOLDER = Path(main_script_path).parent / "my_pages"
+    PAGES_FOLDER = Path(main_script_path).parent / "pages"
 
     if PAGES_FOLDER.exists():
         # Read out the my_pages folder and create a page for every script:
