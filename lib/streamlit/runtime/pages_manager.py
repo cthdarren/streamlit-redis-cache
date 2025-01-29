@@ -222,7 +222,7 @@ class PagesManager:
     NOTE: Each strategy handles its own thread safety when accessing the pages
     """
 
-    DefaultStrategy: type[PagesStrategyV1 | PagesStrategyV2] = PagesStrategyV1
+    DefaultStrategy: type[PagesStrategyV1 | PagesStrategyV2] = PagesStrategyV2
 
     def __init__(
         self,

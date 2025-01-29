@@ -21,7 +21,7 @@ import types
 from contextlib import contextmanager
 from enum import Enum
 from timeit import default_timer as timer
-from typing import TYPE_CHECKING, Callable, Final
+from typing import TYPE_CHECKING, Callable, Final, Literal
 
 from blinker import Signal
 
@@ -128,11 +128,19 @@ def _mpa_v1(main_script_path: str):
         # Read out the my_pages folder and create a page for every script:
         pages = PAGES_FOLDER.glob("*.py")
         pages = [page for page in pages if page.name.endswith(".py")]
+        pages.reverse()
 
         # Use this script as the main page and
         main_page = st.Page(main_script_path, default=True)
         # Initialize the navigation with all the pages:
-        page = st.navigation([main_page] + [st.Page(page) for page in pages])
+        position: Literal["sidebar", "hidden"] = (
+            "hidden"
+            if config.get_option("client.showSidebarNavigation") is False
+            else "sidebar"
+        )
+        page = st.navigation(
+            [main_page] + [st.Page(page) for page in pages], position=position
+        )
 
         if page._page != main_page._page:
             # Only run the page if it is not pointing to this script:

@@ -331,8 +331,8 @@ export class AppNavigation {
     this.isPageIconSet = false
     this.isPageTitleSet = false
 
-    // Start with the V1 strategy as it will apply to V0 as well
-    this.strategy = new StrategyV1(this)
+    // Start with the V2 strategy as it will apply to V0 as well
+    this.strategy = new StrategyV2(this)
   }
 
   handleNewSession(newSession: NewSession): MaybeStateUpdate {

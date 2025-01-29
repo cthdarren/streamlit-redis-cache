@@ -259,14 +259,14 @@ def navigation(
                 script_path = ""
 
             script_hash = page._script_hash
-            if script_hash in pagehash_to_pageinfo:
-                # The page script hash is soley based on the url path
-                # So duplicate page script hashes are due to duplicate url paths
-                raise StreamlitAPIException(
-                    f"Multiple Pages specified with URL pathname {page.url_path}. "
-                    "URL pathnames must be unique. The url pathname may be "
-                    "inferred from the filename, callable name, or title."
-                )
+            # if script_hash in pagehash_to_pageinfo:
+            #     # The page script hash is soley based on the url path
+            #     # So duplicate page script hashes are due to duplicate url paths
+            #     raise StreamlitAPIException(
+            #         f"Multiple Pages specified with URL pathname {page.url_path}. "
+            #         "URL pathnames must be unique. The url pathname may be "
+            #         "inferred from the filename, callable name, or title."
+            #     )
 
             pagehash_to_pageinfo[script_hash] = {
                 "page_script_hash": script_hash,
