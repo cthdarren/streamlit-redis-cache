@@ -1544,7 +1544,7 @@ export class App extends PureComponent<Props, State> {
       )
       pageScriptHash = ""
     }
-    console.log("YO YO YO YO!!!!")
+
     this.sendBackMsg(
       new BackMsg({
         rerunScript: {
