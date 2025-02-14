@@ -295,9 +295,12 @@ class DataCaches(CacheStatsProvider):
             persist=persist,
         )
 
-    def get_storage_manager(self) -> CacheStorageManager:
+    def get_storage_manager(self, persist=None) -> CacheStorageManager:
         if runtime.exists():
-            return runtime.get_instance().cache_storage_manager
+            if persist == "redis":
+                return runtime.get_instance().cache_storage_manager
+            else:
+                return runtime.get_instance()._redis_cache_storage_manager
         else:
             # When running in "raw mode", we can't access the CacheStorageManager,
             # so we're falling back to InMemoryCache.

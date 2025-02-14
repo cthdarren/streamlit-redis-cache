@@ -33,6 +33,9 @@ from streamlit.runtime.caching import (
 from streamlit.runtime.caching.storage.local_disk_cache_storage import (
     LocalDiskCacheStorageManager,
 )
+from streamlit.runtime.caching.storage.redis_cache_storage import (
+    RedisCacheStorageManager,
+)
 from streamlit.runtime.forward_msg_cache import (
     ForwardMsgCache,
     create_reference_msg,
@@ -96,6 +99,10 @@ class RuntimeConfig:
     # The cache storage backend for Streamlit's st.cache_data.
     cache_storage_manager: CacheStorageManager = field(
         default_factory=LocalDiskCacheStorageManager
+    )
+
+    redis_cache_storage_manager: CacheStorageManager = field(
+        default_factory=RedisCacheStorageManager
     )
 
     # The ComponentRegistry instance to use.
@@ -207,6 +214,7 @@ class Runtime:
         self._uploaded_file_mgr = config.uploaded_file_manager
         self._media_file_mgr = MediaFileManager(storage=config.media_file_storage)
         self._cache_storage_manager = config.cache_storage_manager
+        self._redis_cache_storage_manager = config.redis_cache_storage_manager
         self._script_cache = ScriptCache()
 
         self._session_mgr = config.session_manager_class(
