@@ -77,7 +77,7 @@ _LOGGER: Final = get_logger(__name__)
 CACHE_DATA_MESSAGE_REPLAY_CTX = CachedMessageReplayContext(CacheType.DATA)
 
 # The cache persistence options we support: "disk" or None
-CachePersistType: TypeAlias = Union[Literal["disk"], None]
+CachePersistType: TypeAlias = Union[Literal["redis", "disk"], None]
 
 
 class CachedDataFuncInfo(CachedFuncInfo):
@@ -555,10 +555,10 @@ class CacheDataAPI:
         else:
             persist_string = persist
 
-        if persist_string not in (None, "disk"):
+        if persist_string not in (None, "disk", "redis"):
             # We'll eventually have more persist options.
             raise StreamlitAPIException(
-                f"Unsupported persist option '{persist}'. Valid values are 'disk' or None."
+                f"Unsupported persist option '{persist}'. Valid values are 'disk', 'redis', or None."
             )
 
         if experimental_allow_widgets:
