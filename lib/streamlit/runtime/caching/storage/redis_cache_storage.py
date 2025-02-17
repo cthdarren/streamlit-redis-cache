@@ -15,6 +15,7 @@
 from __future__ import annotations
 
 import math
+import os
 from typing import Final
 
 import redis
@@ -28,7 +29,6 @@ from streamlit.runtime.caching.storage.cache_storage_protocol import (
     CacheStorageKeyNotFoundError,
     CacheStorageManager,
 )
-from streamlit.runtime.secrets import secrets_singleton
 
 _LOGGER: Final = get_logger(__name__)
 
@@ -64,24 +64,24 @@ class RedisCacheStorage(CacheStorage):
         # TODO: Possibly unneeded
         # self._max_entries = context.max_entries
 
-        redis_category = secrets_singleton.get("redis")
-        if (
-            redis_category is not None
-            and "host" in redis_category
-            and "port" in redis_category
-            and "db" in redis_category
-        ):
-            self.conn = redis.Redis(
-                host=redis_category["host"],
-                port=int(redis_category["port"]),
-                db=int(redis_category["db"]),
+        try:
+            redis_host: str = os.getenv("REDIS_HOST", "localhost")
+            redis_port: int = int(os.getenv("REDIS_PORT", 6379))
+            redis_db: int = int(os.getenv("REDIS_DB", 0))
+        except ValueError:
+            _LOGGER.error(
+                "Type mismatch for redis env variables, redis_port and redis_db should be parseable as int"
             )
-            _LOGGER.info(self.conn)
-        else:
-            _LOGGER.error("Unable to read redis connection string")
-            raise CacheStorageError(
-                "Unable to read redis connection string, please check .streamlit/secrets.toml for the redis connection string"
+            raise ValueError(
+                "Type mismatch for redis env variables, redis_port and redis_db should be parseable as int"
             )
+
+        self.conn = redis.Redis(
+            host=redis_host,
+            port=redis_port,
+            db=redis_db,
+        )
+        _LOGGER.info(self.conn)
 
     @property
     def ttl_seconds(self) -> float:
@@ -109,7 +109,10 @@ class RedisCacheStorage(CacheStorage):
                 _LOGGER.exception(
                     "Error connecting to Redis server. Is it currently running?"
                 )
-                raise CacheStorageError(
+
+                # Don't raise because we don't want the server to crash, but
+                # to just run the function on each call regardless if the server is unreachable
+                raise CacheStorageKeyNotFoundError(
                     "Error connecting to Redis server. Is it currently running?"
                 ) from ex
         else:
@@ -125,16 +128,19 @@ class RedisCacheStorage(CacheStorage):
                 if self.ttl_seconds != math.inf:
                     self.conn.expire(key, self.ttl_seconds)
                 _LOGGER.debug(f"REDIS CACHE WRITTEN: {key}")
-            except Exception as ex:
-                _LOGGER.exception("Unable to write to cache", exc_info=ex)
-                raise CacheStorageError("Unable to write to cache") from ex
-            except ConnectionError as ex:
+            except ConnectionError:
                 _LOGGER.exception(
                     "Error connecting to Redis server. Is it currently running?"
                 )
-                raise CacheStorageError(
-                    "Error connecting to Redis server. Is it currently running?"
-                ) from ex
+                # Don't raise because we don't want the server to crash, but
+                # to just run the function on each call regardless if the server is unreachable
+
+                # raise CacheStorageError(
+                #     "Error connecting to Redis server. Is it currently running?"
+                # ) from ex
+            except Exception as ex:
+                _LOGGER.exception("Unable to write to cache", exc_info=ex)
+                raise CacheStorageError("Unable to write to cache") from ex
 
     def delete(self, key: str) -> None:
         """Delete a cache file from redis. If the key does not exist on redis,
