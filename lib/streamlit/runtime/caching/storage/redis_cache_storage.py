@@ -12,50 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Declares the LocalDiskCacheStorageManager class, which is used
-to create LocalDiskCacheStorage instances wrapped by InMemoryCacheStorageWrapper,
-InMemoryCacheStorageWrapper wrapper allows to have first layer of in-memory cache,
-before accessing to LocalDiskCacheStorage itself.
-
-Declares the LocalDiskCacheStorage class, which is used to store cached
-values on disk.
-
-How these classes work together
--------------------------------
-
-- LocalDiskCacheStorageManager : each instance of this is able
-to create LocalDiskCacheStorage instances wrapped by InMemoryCacheStorageWrapper,
-and to clear data from cache storage folder. It is also LocalDiskCacheStorageManager
-responsibility to check if the context is valid for the storage, and to log warning
-if the context is not valid.
-
-- LocalDiskCacheStorage : each instance of this is able to get, set, delete, and clear
-entries from disk for a single `@st.cache_data` decorated function if `persist="disk"`
-is used in CacheStorageContext.
-
-
-    ┌───────────────────────────────┐
-    │  LocalDiskCacheStorageManager │
-    │                               │
-    │     - clear_all               │
-    │     - check_context           │
-    │                               │
-    └──┬────────────────────────────┘
-       │
-       │                ┌──────────────────────────────┐
-       │                │                              │
-       │ create(context)│  InMemoryCacheStorageWrapper │
-       └────────────────►                              │
-                        │    ┌─────────────────────┐   │
-                        │    │                     │   │
-                        │    │   LocalDiskStorage  │   │
-                        │    │                     │   │
-                        │    └─────────────────────┘   │
-                        │                              │
-                        └──────────────────────────────┘
-
-"""
-
 from __future__ import annotations
 
 import math
@@ -76,24 +32,10 @@ from streamlit.runtime.secrets import secrets_singleton
 
 _LOGGER: Final = get_logger(__name__)
 
-# Streamlit directory where persisted @st.cache_data objects live.
-# (This is the same directory that @st.cache persisted objects live.
-# But @st.cache_data uses a different extension, so they don't overlap.)
-_CACHE_DIR_NAME: Final = "cache"
-
-# The extension for our persisted @st.cache_data objects.
-# (`@st.cache_data` was originally called `@st.memo`)
-_CACHED_FILE_EXTENSION: Final = "memo"
-
 
 class RedisCacheStorageManager(CacheStorageManager):
     def create(self, context: CacheStorageContext) -> CacheStorage:
-        """Creates a new cache storage instance wrapped with in-memory cache layer"""
-        # persist_storage = RedisCacheStorage(context)
-        # return InMemoryCacheStorageWrapper(
-        #     persist_storage=persist_storage, context=context
-        # )
-        """Plan to completely skip the inmemorycache, directly hit redis server on every call"""
+        """Skip the inmemorycache, directly hit redis server on every call"""
         return RedisCacheStorage(context=context)
 
     def clear_all(self) -> None:
@@ -119,7 +61,8 @@ class RedisCacheStorage(CacheStorage):
         self.function_key = context.function_key
         self.persist = context.persist
         self._ttl_seconds = context.ttl_seconds
-        self._max_entries = context.max_entries
+        # TODO: Possibly unneeded
+        # self._max_entries = context.max_entries
 
         redis_category = secrets_singleton.get("redis")
         if (
@@ -144,9 +87,10 @@ class RedisCacheStorage(CacheStorage):
     def ttl_seconds(self) -> float:
         return self._ttl_seconds if self._ttl_seconds is not None else math.inf
 
-    @property
-    def max_entries(self) -> float:
-        return float(self._max_entries) if self._max_entries is not None else math.inf
+    # TODO: Possibly unneeded
+    # @property
+    # def max_entries(self) -> float:
+    #     return float(self._max_entries) if self._max_entries is not None else math.inf
 
     def get(self, key: str) -> bytes:
         """
@@ -168,17 +112,6 @@ class RedisCacheStorage(CacheStorage):
                 raise CacheStorageError(
                     "Error connecting to Redis server. Is it currently running?"
                 ) from ex
-            # path = self._get_cache_file_path(key)
-            # try:
-            #     with streamlit_read(path, binary=True) as input:
-            #         value = input.read()
-            #         _LOGGER.debug("Disk cache HIT: %s", key)
-            #         return bytes(value)
-            # except FileNotFoundError:
-            #     raise CacheStorageKeyNotFoundError("Key not found in disk cache")
-            # except Exception as ex:
-            #     _LOGGER.exception("Error reading from cache")
-            #     raise CacheStorageError("Unable to read from cache") from ex
         else:
             raise CacheStorageKeyNotFoundError(
                 f"Redis cache storage is disabled (persist={self.persist})"
@@ -189,24 +122,19 @@ class RedisCacheStorage(CacheStorage):
         if self.persist == "redis":
             try:
                 self.conn.set(key, value)
-                self.conn.expire(key, self.ttl_seconds)
+                if self.ttl_seconds != math.inf:
+                    self.conn.expire(key, self.ttl_seconds)
                 _LOGGER.debug(f"REDIS CACHE WRITTEN: {key}")
             except Exception as ex:
                 _LOGGER.exception("Unable to write to cache", exc_info=ex)
                 raise CacheStorageError("Unable to write to cache") from ex
-            # path = self._get_cache_file_path(key)
-            # try:
-            #     with streamlit_write(path, binary=True) as output:
-            #         output.write(value)
-            # except errors.Error as ex:
-            #     _LOGGER.debug("Unable to write to cache", exc_info=ex)
-            #     # Clean up file so we don't leave zero byte files.
-            #     try:
-            #         os.remove(path)
-            #     except (FileNotFoundError, OSError):
-            #         # If we can't remove the file, it's not a big deal.
-            #         pass
-            #     raise CacheStorageError("Unable to write to cache") from ex
+            except ConnectionError as ex:
+                _LOGGER.exception(
+                    "Error connecting to Redis server. Is it currently running?"
+                )
+                raise CacheStorageError(
+                    "Error connecting to Redis server. Is it currently running?"
+                ) from ex
 
     def delete(self, key: str) -> None:
         """Delete a cache file from redis. If the key does not exist on redis,
@@ -215,22 +143,32 @@ class RedisCacheStorage(CacheStorage):
         if self.persist == "redis":
             try:
                 self.conn.delete(key)
+            except ConnectionError as ex:
+                _LOGGER.exception(
+                    "Error connecting to Redis server. Is it currently running?"
+                )
+                raise CacheStorageError(
+                    "Error connecting to Redis server. Is it currently running?"
+                ) from ex
             except Exception as ex:
                 _LOGGER.exception(
                     "Unable to remove a file from the redis cache", exc_info=ex
                 )
 
     def clear(self) -> None:
-        """Delete all keys for the current storage"""
-        # cache_dir = get_cache_folder_path()
-
-        # if os.path.isdir(cache_dir):
-        #     # We try to remove all files in the cache directory that start with
-        #     # the function key, whether `clear` called for `self.persist`
-        #     # storage or not, to avoid leaving orphaned files in the cache directory.
-        #     for file_name in os.listdir(cache_dir):
-        #         if self._is_cache_file(file_name):
-        #             os.remove(os.path.join(cache_dir, file_name))
+        """Delete all keys from redis by running the flushdb command"""
+        if self.persist == "redis":
+            try:
+                self.conn.execute_command("flushdb")
+            except ConnectionError as ex:
+                _LOGGER.exception(
+                    "Error connecting to Redis server. Is it currently running?"
+                )
+                raise CacheStorageError(
+                    "Error connecting to Redis server. Is it currently running?"
+                ) from ex
+            except Exception as ex:
+                _LOGGER.exception("Unable to clear redis cache", exc_info=ex)
 
     def close(self) -> None:
         """Dummy implementation of close, we don't need to actually "close" anything"""
