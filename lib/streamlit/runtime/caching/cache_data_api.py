@@ -225,7 +225,6 @@ class DataCaches(CacheStatsProvider):
                 # storage manager clear_all method;
                 # if not implemented, fallback to remove all
                 # available storages one by one
-                # TODO: Find out if you want to put persist here to clear redis cache
                 self.get_storage_manager().clear_all()
             except NotImplementedError:
                 for data_cache in self._function_caches.values():
