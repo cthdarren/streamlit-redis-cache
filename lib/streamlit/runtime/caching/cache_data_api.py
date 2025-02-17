@@ -203,7 +203,7 @@ class DataCaches(CacheStatsProvider):
                 max_entries=max_entries,
                 persist=persist,
             )
-            cache_storage_manager = self.get_storage_manager()
+            cache_storage_manager = self.get_storage_manager(persist)
             storage = cache_storage_manager.create(cache_context)
 
             cache = DataCache(
@@ -225,6 +225,7 @@ class DataCaches(CacheStatsProvider):
                 # storage manager clear_all method;
                 # if not implemented, fallback to remove all
                 # available storages one by one
+                # TODO: Find out if you want to put persist here to clear redis cache
                 self.get_storage_manager().clear_all()
             except NotImplementedError:
                 for data_cache in self._function_caches.values():
@@ -269,7 +270,7 @@ class DataCaches(CacheStatsProvider):
             persist=persist,
         )
         try:
-            self.get_storage_manager().check_context(cache_context)
+            self.get_storage_manager(persist).check_context(cache_context)
         except InvalidCacheStorageContext as e:
             _LOGGER.error(
                 "Cache params for function %s are incompatible with current "
@@ -298,9 +299,9 @@ class DataCaches(CacheStatsProvider):
     def get_storage_manager(self, persist=None) -> CacheStorageManager:
         if runtime.exists():
             if persist == "redis":
-                return runtime.get_instance().cache_storage_manager
+                return runtime.get_instance().redis_cache_storage_manager
             else:
-                return runtime.get_instance()._redis_cache_storage_manager
+                return runtime.get_instance().cache_storage_manager
         else:
             # When running in "raw mode", we can't access the CacheStorageManager,
             # so we're falling back to InMemoryCache.

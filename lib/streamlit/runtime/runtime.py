@@ -252,6 +252,10 @@ class Runtime:
         return self._cache_storage_manager
 
     @property
+    def redis_cache_storage_manager(self) -> CacheStorageManager:
+        return self._redis_cache_storage_manager
+
+    @property
     def media_file_mgr(self) -> MediaFileManager:
         return self._media_file_mgr
 

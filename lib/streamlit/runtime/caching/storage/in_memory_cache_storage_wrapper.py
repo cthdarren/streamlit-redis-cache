@@ -78,12 +78,15 @@ class InMemoryCacheStorageWrapper(CacheStorage):
     def max_entries(self) -> float:
         return float(self._max_entries) if self._max_entries is not None else math.inf
 
-    def get(self, key: str) -> bytes:
+    def get(self, key: str, redis=False) -> bytes:
         """
         Returns the stored value for the key or raise CacheStorageKeyNotFoundError if
         the key is not found
         """
         try:
+            # TO TRY FOR REDIS CACHING HITS
+            if redis:
+                raise CacheStorageKeyNotFoundError()
             entry_bytes = self._read_from_mem_cache(key)
         except CacheStorageKeyNotFoundError:
             entry_bytes = self._persist_storage.get(key)

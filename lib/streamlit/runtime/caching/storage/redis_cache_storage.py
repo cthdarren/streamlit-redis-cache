@@ -63,8 +63,10 @@ import os
 import shutil
 from typing import Final
 
-from streamlit import errors
-from streamlit.file_util import get_streamlit_file_path, streamlit_read, streamlit_write
+import redis
+from redis.exceptions import ConnectionError
+
+from streamlit.file_util import get_streamlit_file_path
 from streamlit.logger import get_logger
 from streamlit.runtime.caching.storage.cache_storage_protocol import (
     CacheStorage,
@@ -76,6 +78,7 @@ from streamlit.runtime.caching.storage.cache_storage_protocol import (
 from streamlit.runtime.caching.storage.in_memory_cache_storage_wrapper import (
     InMemoryCacheStorageWrapper,
 )
+from streamlit.runtime.secrets import secrets_singleton
 
 _LOGGER: Final = get_logger(__name__)
 
@@ -126,6 +129,25 @@ class RedisCacheStorage(CacheStorage):
         self._ttl_seconds = context.ttl_seconds
         self._max_entries = context.max_entries
 
+        redis_category = secrets_singleton.get("redis")
+        if (
+            redis_category is not None
+            and "host" in redis_category
+            and "port" in redis_category
+            and "db" in redis_category
+        ):
+            self.conn = redis.Redis(
+                host=redis_category["host"],
+                port=int(redis_category["port"]),
+                db=int(redis_category["db"]),
+            )
+            _LOGGER.info(self.conn)
+        else:
+            _LOGGER.error("Unable to read redis connection string")
+            raise CacheStorageError(
+                "Unable to read redis connection string, please check .streamlit/secrets.toml for the redis connection string"
+            )
+
     @property
     def ttl_seconds(self) -> float:
         return self._ttl_seconds if self._ttl_seconds is not None else math.inf
@@ -141,66 +163,77 @@ class RedisCacheStorage(CacheStorage):
         with persist="disk"
         """
         if self.persist == "redis":
-            path = self._get_cache_file_path(key)
             try:
-                with streamlit_read(path, binary=True) as input:
-                    value = input.read()
-                    _LOGGER.debug("Disk cache HIT: %s", key)
-                    return bytes(value)
-            except FileNotFoundError:
-                raise CacheStorageKeyNotFoundError("Key not found in disk cache")
-            except Exception as ex:
+                value = self.conn.get(key, redis=True)
+                _LOGGER.debug(f"REDIS CACHE HIT: {key}")
+                if value is None:
+                    raise CacheStorageKeyNotFoundError("Key not found in redis cache")
+                return bytes(value)
+            except ConnectionError as ex:
                 _LOGGER.exception("Error reading from cache")
                 raise CacheStorageError("Unable to read from cache") from ex
+            # path = self._get_cache_file_path(key)
+            # try:
+            #     with streamlit_read(path, binary=True) as input:
+            #         value = input.read()
+            #         _LOGGER.debug("Disk cache HIT: %s", key)
+            #         return bytes(value)
+            # except FileNotFoundError:
+            #     raise CacheStorageKeyNotFoundError("Key not found in disk cache")
+            # except Exception as ex:
+            #     _LOGGER.exception("Error reading from cache")
+            #     raise CacheStorageError("Unable to read from cache") from ex
         else:
             raise CacheStorageKeyNotFoundError(
-                f"Local disk cache storage is disabled (persist={self.persist})"
+                f"Redis cache storage is disabled (persist={self.persist})"
             )
 
     def set(self, key: str, value: bytes) -> None:
         """Sets the value for a given key"""
-        if self.persist == "disk":
-            path = self._get_cache_file_path(key)
+        if self.persist == "redis":
             try:
-                with streamlit_write(path, binary=True) as output:
-                    output.write(value)
-            except errors.Error as ex:
-                _LOGGER.debug("Unable to write to cache", exc_info=ex)
-                # Clean up file so we don't leave zero byte files.
-                try:
-                    os.remove(path)
-                except (FileNotFoundError, OSError):
-                    # If we can't remove the file, it's not a big deal.
-                    pass
+                self.conn.set(key, value)
+                _LOGGER.debug(f"REDIS CACHE WRITTEN: {key}")
+            except Exception as ex:
+                _LOGGER.exception("Unable to write to cache", exc_info=ex)
                 raise CacheStorageError("Unable to write to cache") from ex
+            # path = self._get_cache_file_path(key)
+            # try:
+            #     with streamlit_write(path, binary=True) as output:
+            #         output.write(value)
+            # except errors.Error as ex:
+            #     _LOGGER.debug("Unable to write to cache", exc_info=ex)
+            #     # Clean up file so we don't leave zero byte files.
+            #     try:
+            #         os.remove(path)
+            #     except (FileNotFoundError, OSError):
+            #         # If we can't remove the file, it's not a big deal.
+            #         pass
+            #     raise CacheStorageError("Unable to write to cache") from ex
 
     def delete(self, key: str) -> None:
         """Delete a cache file from disk. If the file does not exist on disk,
         return silently. If another exception occurs, log it. Does not throw.
         """
-        if self.persist == "disk":
-            path = self._get_cache_file_path(key)
+        if self.persist == "redis":
             try:
-                os.remove(path)
-            except FileNotFoundError:
-                # The file is already removed.
-                pass
+                self.conn.delete(key)
             except Exception as ex:
                 _LOGGER.exception(
-                    "Unable to remove a file from the disk cache", exc_info=ex
+                    "Unable to remove a file from the redis cache", exc_info=ex
                 )
 
     def clear(self) -> None:
         """Delete all keys for the current storage"""
-        cache_dir = get_cache_folder_path()
+        # cache_dir = get_cache_folder_path()
 
-        if os.path.isdir(cache_dir):
-            # We try to remove all files in the cache directory that start with
-            # the function key, whether `clear` called for `self.persist`
-            # storage or not, to avoid leaving orphaned files in the cache directory.
-            for file_name in os.listdir(cache_dir):
-                if self._is_cache_file(file_name):
-                    os.remove(os.path.join(cache_dir, file_name))
+        # if os.path.isdir(cache_dir):
+        #     # We try to remove all files in the cache directory that start with
+        #     # the function key, whether `clear` called for `self.persist`
+        #     # storage or not, to avoid leaving orphaned files in the cache directory.
+        #     for file_name in os.listdir(cache_dir):
+        #         if self._is_cache_file(file_name):
+        #             os.remove(os.path.join(cache_dir, file_name))
 
     def close(self) -> None:
         """Dummy implementation of close, we don't need to actually "close" anything"""
