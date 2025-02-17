@@ -382,7 +382,7 @@ class CacheDataPersistTest(DeltaGeneratorTestCase):
                 pass
 
         self.assertEqual(
-            "Unsupported persist option 'yesplz'. Valid values are 'disk' or None.",
+            "Unsupported persist option 'yesplz'. Valid values are 'disk', 'redis', or None.",
             str(e.exception),
         )
 
