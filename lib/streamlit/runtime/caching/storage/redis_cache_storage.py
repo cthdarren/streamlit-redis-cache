@@ -59,14 +59,11 @@ is used in CacheStorageContext.
 from __future__ import annotations
 
 import math
-import os
-import shutil
 from typing import Final
 
 import redis
 from redis.exceptions import ConnectionError
 
-from streamlit.file_util import get_streamlit_file_path
 from streamlit.logger import get_logger
 from streamlit.runtime.caching.storage.cache_storage_protocol import (
     CacheStorage,
@@ -74,9 +71,6 @@ from streamlit.runtime.caching.storage.cache_storage_protocol import (
     CacheStorageError,
     CacheStorageKeyNotFoundError,
     CacheStorageManager,
-)
-from streamlit.runtime.caching.storage.in_memory_cache_storage_wrapper import (
-    InMemoryCacheStorageWrapper,
 )
 from streamlit.runtime.secrets import secrets_singleton
 
@@ -95,15 +89,15 @@ _CACHED_FILE_EXTENSION: Final = "memo"
 class RedisCacheStorageManager(CacheStorageManager):
     def create(self, context: CacheStorageContext) -> CacheStorage:
         """Creates a new cache storage instance wrapped with in-memory cache layer"""
-        persist_storage = RedisCacheStorage(context)
-        return InMemoryCacheStorageWrapper(
-            persist_storage=persist_storage, context=context
-        )
+        # persist_storage = RedisCacheStorage(context)
+        # return InMemoryCacheStorageWrapper(
+        #     persist_storage=persist_storage, context=context
+        # )
+        """Plan to completely skip the inmemorycache, directly hit redis server on every call"""
+        return RedisCacheStorage(context=context)
 
     def clear_all(self) -> None:
-        cache_path = get_cache_folder_path()
-        if os.path.isdir(cache_path):
-            shutil.rmtree(cache_path)
+        pass
 
     def check_context(self, context: CacheStorageContext) -> None:
         if (
@@ -119,9 +113,7 @@ class RedisCacheStorageManager(CacheStorageManager):
 
 
 class RedisCacheStorage(CacheStorage):
-    """Cache storage that persists data to disk
-    This is the default cache persistence layer for `@st.cache_data`
-    """
+    """Cache storage that persists data to redis"""
 
     def __init__(self, context: CacheStorageContext):
         self.function_key = context.function_key
@@ -164,14 +156,18 @@ class RedisCacheStorage(CacheStorage):
         """
         if self.persist == "redis":
             try:
-                value = self.conn.get(key, redis=True)
+                value = self.conn.get(key)
                 _LOGGER.debug(f"REDIS CACHE HIT: {key}")
                 if value is None:
                     raise CacheStorageKeyNotFoundError("Key not found in redis cache")
                 return bytes(value)
             except ConnectionError as ex:
-                _LOGGER.exception("Error reading from cache")
-                raise CacheStorageError("Unable to read from cache") from ex
+                _LOGGER.exception(
+                    "Error connecting to Redis server. Is it currently running?"
+                )
+                raise CacheStorageError(
+                    "Error connecting to Redis server. Is it currently running?"
+                ) from ex
             # path = self._get_cache_file_path(key)
             # try:
             #     with streamlit_read(path, binary=True) as input:
@@ -193,6 +189,7 @@ class RedisCacheStorage(CacheStorage):
         if self.persist == "redis":
             try:
                 self.conn.set(key, value)
+                self.conn.expire(key, self.ttl_seconds)
                 _LOGGER.debug(f"REDIS CACHE WRITTEN: {key}")
             except Exception as ex:
                 _LOGGER.exception("Unable to write to cache", exc_info=ex)
@@ -212,7 +209,7 @@ class RedisCacheStorage(CacheStorage):
             #     raise CacheStorageError("Unable to write to cache") from ex
 
     def delete(self, key: str) -> None:
-        """Delete a cache file from disk. If the file does not exist on disk,
+        """Delete a cache file from redis. If the key does not exist on redis,
         return silently. If another exception occurs, log it. Does not throw.
         """
         if self.persist == "redis":
@@ -237,20 +234,3 @@ class RedisCacheStorage(CacheStorage):
 
     def close(self) -> None:
         """Dummy implementation of close, we don't need to actually "close" anything"""
-
-    def _get_cache_file_path(self, value_key: str) -> str:
-        """Return the path of the disk cache file for the given value."""
-        cache_dir = get_cache_folder_path()
-        return os.path.join(
-            cache_dir, f"{self.function_key}-{value_key}.{_CACHED_FILE_EXTENSION}"
-        )
-
-    def _is_cache_file(self, fname: str) -> bool:
-        """Return true if the given file name is a cache file for this storage."""
-        return fname.startswith(f"{self.function_key}-") and fname.endswith(
-            f".{_CACHED_FILE_EXTENSION}"
-        )
-
-
-def get_cache_folder_path() -> str:
-    return get_streamlit_file_path(_CACHE_DIR_NAME)
