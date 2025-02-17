@@ -84,7 +84,7 @@ coverage/
 ########################################################################
 .streamlit/
 !e2e_playwright/.streamlit/
-lib/streamlit/static
+# lib/streamlit/static
 streamlit-storage
 
 # Data Files
