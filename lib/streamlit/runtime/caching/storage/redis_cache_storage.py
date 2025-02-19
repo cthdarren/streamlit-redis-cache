@@ -105,7 +105,7 @@ class RedisCacheStorage(CacheStorage):
                 if value is None:
                     raise CacheStorageKeyNotFoundError("Key not found in redis cache")
                 return bytes(value)
-            except ConnectionError as ex:
+            except (ConnectionError, ConnectionRefusedError) as ex:
                 _LOGGER.exception(
                     "Error connecting to Redis server. Is it currently running?"
                 )
@@ -128,7 +128,7 @@ class RedisCacheStorage(CacheStorage):
                 if self.ttl_seconds != math.inf:
                     self.conn.expire(key, self.ttl_seconds)
                 _LOGGER.debug(f"REDIS CACHE WRITTEN: {key}")
-            except ConnectionError:
+            except (ConnectionError, ConnectionRefusedError):
                 _LOGGER.exception(
                     "Error connecting to Redis server. Is it currently running?"
                 )
