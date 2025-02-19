@@ -100,7 +100,7 @@ class RedisCacheStorage(CacheStorage):
         """
         if self.persist == "redis":
             try:
-                value = self.conn.get(key)
+                value = self.conn.get(f"{self.function_key}-{key}")
                 _LOGGER.debug(f"REDIS CACHE HIT: {key}")
                 if value is None:
                     raise CacheStorageKeyNotFoundError("Key not found in redis cache")
@@ -124,7 +124,7 @@ class RedisCacheStorage(CacheStorage):
         """Sets the value for a given key"""
         if self.persist == "redis":
             try:
-                self.conn.set(key, value)
+                self.conn.set(f"{self.function_key}-{key}", value)
                 if self.ttl_seconds != math.inf:
                     self.conn.expire(key, self.ttl_seconds)
                 _LOGGER.debug(f"REDIS CACHE WRITTEN: {key}")
