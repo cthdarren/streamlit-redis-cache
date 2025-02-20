@@ -1,140 +1,177 @@
+# Streamlit caching documentation
+This readme documents some basic understanding of the streamlit caching mechanism, with further in depth insights into @st.cache_data further down [below](#deep-dive-into-%40st.cache_data). This is mainly because this fork focuses around the modification around the @st.cache_data method to implement redis caching.
+
+<br/>
+
+## Table of Contents
+1. [Key Pointers](#key-pointers)
+2. [@st.cache_data decorator](#%40st.cache_data-decorator)
+3. [@st.cache_resource decorator](#%40st.cache_resource-decorator)
+4. [st.sssion_state](#st.session_state)
+5. [Mutations and Concurrency Issues](#mutations-and-concurrency-issues)
+6. [Summary](#summary)
+7. [Deep Dive into @st.cache_data](#deep-dive-into-%40st.cache_data)
+    - [Cache Miss Scenario](#cache-miss-scenario)
+    - [Cache Hit Scenario](#cache-hit-scenario)
+8. [Changes made in this fork](#changes-made-in-this-fork)
+9. [Additional Notes](#additional-notes)
+10. [Deployment of your own streamlit fork](#deployment-of-your-own-streamlit-fork)
+
+<br/>
+
+## Key pointers
+- When something must be updated on the screen, Streamlit reruns the entire python script from top to bottom.
+- Whenever the source code is modified
+- Whenever a user interacts with widgets in the app. Like dragging a slider, entering text, or clicking buttons
+- If a callback (like on_change or on_click) is passed to a widget, it will run before the rest of your script
+
+<br/>
+
+## @st.cache_data decorator
+Will cache return results, storing return __values__ in cache.
+Upon each function call, it will return the cached result based on whether a few criterias match:
+1) The function name is the same
+2) The parameters passed are the same
+> __INFO:__  If function logic changes only based on streamlit state, the cache will not update with the new values. You MUST use a different parameter for the cache to register as having to re run the function.
+
+<br/>
+
+## @st.cache_resource decorator
+Will cache return results, storing **objects** that were returned by the function.
+Upon each function call, it will return the object as if stored in a global variable.
+
+> __WARNING:__ Using `@st.cache_resource` on objects that are not thread-safe might lead to crashes or corrupted data.
+
+<br/>
+
+## st.session_state
+
+st.session_state helps to maintain session variables that persist between each script reload.
+
+```python
+   if 'key' not in st.session_state:
+       st.session_state['key'] = 'value'
+```
+
+This prevents the key from being overwritten when streamlit performs a rerun of the py file
+
+<br/>
+
+
+## Mutations and Concurrency Issues
+
+Since streamlit is a web framework, it is built to support multiple users connecting to the server at once. When two (or more) users view the app at the same time, they will all cause the Python script to re-run, which may manipulate cached return objects at the same time.
+
+Mutations refer to changes made to a cached function's return value, after the function has been called.
+
+```py
+import streamlit as st
+
+@st.cache_resource
+def load_data():
+    return [0]
+
+mutlist = load_data()
+
+st.text(mutlist[0])
+
+mutlist[0] = 1
+
+st.button("Rerun")
+```
+> This would change from 0 to 1 when the button is pressed.
+
+Mutations like the one above can cause unpredictable behaviours and as such, st.cache_resource should only be used if you are 100% sure that the return object will not be mutated.
+
+`@st.cache_data` is therefore much safer to use in most cases, as it resorts to making a copy of the original return value, and reusing that saved value across all sessions instead.
+
+<br>
 <br>
 
-<img src="https://user-images.githubusercontent.com/7164864/217935870-c0bc60a3-6fc0-4047-b011-7b4c59488c91.png" alt="Streamlit logo" style="margin-top:50px"></img>
+## Summary
+`
+@st.cache_data
+` 
+is comparable to deep copying an array where it creates a brand new copy of the original array, whereas 
 
-# Welcome to Streamlit 👋
+`
+@st.cache_resource
+`
+is similar to shallow copying arrays, where it only references the real object instead of creating another copy
 
-**A faster way to build and share data apps.**
+<br/>
 
-## What is Streamlit?
+## Deep dive into @st.cache_data
 
-Streamlit lets you transform Python scripts into interactive web apps in minutes, instead of weeks. Build dashboards, generate reports, or create chat apps. Once you’ve created an app, you can use our [Community Cloud platform](https://streamlit.io/cloud) to deploy, manage, and share your app.
+Each function has their own respective cache, denoted by the `function_key`, and each function cache entry has an individual entry for each set of parameters given.
 
-### Why choose Streamlit?
+### Cache Miss Scenario 
+1. Decorator is instantiated, creates a `CachedDataFuncInfo` object (cache_data_api.py:571)
 
-- **Simple and Pythonic:** Write beautiful, easy-to-read code.
-- **Fast, interactive prototyping:** Let others interact with your data and provide feedback quickly.
-- **Live editing:** See your app update instantly as you edit your script.
-- **Open-source and free:** Join a vibrant community and contribute to Streamlit's future.
+2. Upon reaching a function call, triggers the `__call__()` in built method of `CachedFunc` (cache_utils.py:204). This further triggers the `self._get_or_create_cached_value()` method.
+3. The `self._get_or_create_cached_value()` method (cache_utils.py:219) calls `get_function_cache()` to get the DataCache() relating to the function.
+    - The `get_function_cache()` function makes a call to the `get_cache()` method of the `DataCaches()` singleton, which returns the `DataCache()` relating to the function
+    - This `DataCaches()` (basically a list of DataCache() objects) singleton (cache_data_api.py:143) looks through it's own `_function_caches` attribute to find the `DataCache()` tied to the function.
+    - If the `DataCache()` object doesn't exist (normally on first run/cache miss), it is created immediately, then returned.
 
-## Installation
+4. Then makes a `value_key` using the arguments passed to the function. This `value_key` determines the return value for a given set of arguments.
+5. Uses the `value_key` to read from the cache obtained in Step 3 using the `cache.read_result(value_key)` method.  
+    > INFO: Remember that the function cache stores the return values of all arguments passed to that specific function, and the `value_key` is the key that identifies which of these return values is the correct one.
 
-Open a terminal and run:
+6. In the `read_result()` method (cache_data_api.py:632), it attempts to get the pickled return value with the given key using `self.storage.get(key)`, this would by default check the `InMymoryCacheStorageWrapper` (in_memory_cache_storage_wrapper.py:33), to read from the in memory cache, because this is how streamlit caching works by nature. Read from local mem > check for disk persistence. 
+7. If the cached value doesn't exist in the given storage medium (cache miss), it returns a `CacheKeyNotFounderror`. 
+8. The exception is caught within the `_get_or_create_cached_value()` method
+9. The `_handle_cache_miss()` method is run (cache_utils.py:271), which computs the return value by running the function with the given parameters, writes the result into the cache using `cache.write_result()`, then returns it back to the `_get_or_created_cached_value()` method.
 
-```bash
-$ pip install streamlit
-$ streamlit hello
-```
+<br/>
 
-If this opens our sweet _Streamlit Hello_ app in your browser, you're all set! If not, head over to [our docs](https://docs.streamlit.io/get-started) for specific installs.
+### Cache Hit Scenario
+1. Steps 1. to Step 6. are the same 
+2. Unpickle the value obtained from the cache and return it to `get_or_create_cached_value()`
+3. Returns the result all the way up the call stack 
 
-The app features a bunch of examples of what you can do with Streamlit. Jump to the [quickstart](#quickstart) section to understand how that all works.
+<br/>
 
-<img src="https://user-images.githubusercontent.com/7164864/217936487-1017784e-68ec-4e0d-a7f6-6b97525ddf88.gif" alt="Streamlit Hello" width=500 href="none"></img>
+## Changes made in this fork
+In order to use redis for caching I copied over the implementation for disk persistence (`LocalDiskCacheStorageManager` in local_disk_cache_storage.py). How this would normally work is that Step 6. in the cache miss scenario would run, then upon mem cache miss, it would then check the persistent storage (in this case the disk) to see if there is a cached value there. This would allow cache to persist across reruns of the script.
 
-## Quickstart
+Modifications to the disk persistence file included: 
+1. Change in `get` and `set` methods to query redis server instead of the local disk
+2. Registered a new storage manager in runtime.py for redis (`RedisCacheStorageManager` in redis_cache_storage.py) The difference in instantiation is that there is no `InMemoryCacheStorageWrapper` around the redis persistence, so it skips the mem cache checking and directly queries the server. 
+3. In `get_storage_manager()` (cache_data_api.py:298), an additional check was made to use the `RedisCacheStorageManager` if the `persist` option was set to "redis". This ensured that all `@st.cache_data` decorators with `persist="redis"` would use this storage manager instead of the default behaviour, and at the same time keeping the default implementation in place.
 
-### A little example
+<br/>
 
-Create a new file `streamlit_app.py` with the following code:
+## Additional Notes
+If you would like to maintain the same implementation for redis persistence as streamlit has for local disk persistence (querying the local memory cache before making a query to redis), simply change the `create()` method in redis_cache_storage.py as follows:
+
 ```python
-import streamlit as st
-x = st.slider("Select a value")
-st.write(x, "squared is", x * x)
+def create(self, context: CacheStorageContext) -> CacheStorage:
+    persist_storage = RedisCacheStorage(context)
+    return InMemoryCacheStorageWrapper(
+        persist_storage=persist_storage, context=context
+    )
 ```
 
-Now run it to open the app!
+<br/>
+
+## Deployment of your own streamlit fork
+There isn't really documentation of how to do this that I could find online, but if you would want to deploy your own version of streamlit after forking from the main repo, do follow these steps:
+1. Make a fork from the official streamlit repo
+2. Switch over to the correct branch of the version that you would like 
+> NOTE: Earlier versions might have some issues compiling due to dependency issues and what not so try not to pick a version that is too far in the past
+3. Follow the steps over at https://github.com/streamlit/streamlit/wiki/Contributing
+> INFO: I recommend running the `make all-devel` to be able to run the test suite and check if you have broken anything else with your changes
+4. Make whatever changes you want to the source code for your implementation
+5. (OPTIONAL) run `make pytest` to ensure that you haven't broken anything by implementing your changes
+6. At the root folder, run `make package`
+7. Remove all the lib/ entries in the .gitignore, the run `git commit -m "" --no-verify` to push into your branch
+8. To install through pip, use `pip install git+<github-clone-https>@<branch-name>#subdirectory=lib`
+
+Example:
 ```
-$ streamlit run streamlit_app.py
+pip install git+https://github.com/cthdarren/streamlit.git@1.42.1#subdirectory=lib
 ```
+> INFO: You can also put this link directly into a requirements.txt file, omitting the pip install part
 
-<img src="https://user-images.githubusercontent.com/7164864/215172915-cf087c56-e7ae-449a-83a4-b5fa0328d954.gif" width=300 alt="Little example"></img>
-
-### Give me more!
-
-Streamlit comes in with [a ton of additional powerful elements](https://docs.streamlit.io/develop/api-reference) to spice up your data apps and delight your viewers. Some examples:
-
-<table border="0">
-  <tr>
-    <td>
-      <a target="_blank" href="https://docs.streamlit.io/develop/api-reference/widgets">
-        <img src="https://user-images.githubusercontent.com/7164864/217936099-12c16f8c-7fe4-44b1-889a-1ac9ee6a1b44.png" style="max-height:150px; width:auto; display:block;">
-      </a>
-    </td>
-    <td>
-      <a target="_blank" href="https://docs.streamlit.io/develop/api-reference/data/st.dataframe">
-        <img src="https://user-images.githubusercontent.com/7164864/215110064-5eb4e294-8f30-4933-9563-0275230e52b5.gif" style="max-height:150px; width:auto; display:block;">
-      </a>
-    </td>
-    <td>
-      <a target="_blank" href="https://docs.streamlit.io/develop/api-reference/charts">
-        <img src="https://user-images.githubusercontent.com/7164864/215174472-bca8a0d7-cf4b-4268-9c3b-8c03dad50bcd.gif" style="max-height:150px; width:auto; display:block;">
-      </a>
-    </td>
-    <td>
-      <a target="_blank" href="https://docs.streamlit.io/develop/api-reference/layout">
-        <img src="https://user-images.githubusercontent.com/7164864/217936149-a35c35be-0d96-4c63-8c6a-1c4b52aa8f60.png" style="max-height:150px; width:auto; display:block;">
-      </a>
-    </td>
-    <td>
-      <a target="_blank" href="https://docs.streamlit.io/develop/concepts/multipage-apps">
-        <img src="https://user-images.githubusercontent.com/7164864/215173883-eae0de69-7c1d-4d78-97d0-3bc1ab865e5b.gif" style="max-height:150px; width:auto; display:block;">
-      </a>
-    </td>
-    <td>
-      <a target="_blank" href="https://streamlit.io/gallery">
-        <img src="https://user-images.githubusercontent.com/7164864/215109229-6ae9111f-e5c1-4f0b-b3a2-87a79268ccc9.gif" style="max-height:150px; width:auto; display:block;">
-      </a>
-    </td>
-  </tr>
-  <tr>
-    <td>Input widgets</td>
-    <td>Dataframes</td>
-    <td>Charts</td>
-    <td>Layout</td>
-    <td>Multi-page apps</td>
-    <td>Fun</td>
-  </tr>
-</table>
-
-
-Our vibrant creators community also extends Streamlit capabilities using  🧩 [Streamlit Components](https://streamlit.io/components).
-
-## Get inspired
-
-There's so much you can build with Streamlit:
-- 🤖  [LLMs & chatbot apps](https://streamlit.io/gallery?category=llms)
-- 🧬  [Science & technology apps](https://streamlit.io/gallery?category=science-technology)
-- 💬  [NLP & language apps](https://streamlit.io/gallery?category=nlp-language)
-- 🏦  [Finance & business apps](https://streamlit.io/gallery?category=finance-business)
-- 🗺  [Geography & society apps](https://streamlit.io/gallery?category=geography-society)
-- and more!
-
-**Check out [our gallery!](https://streamlit.io/gallery)** 🎈
-
-## Community Cloud
-
-Deploy, manage and share your apps for free using our [Community Cloud](https://streamlit.io/cloud)! Sign-up [here](https://share.streamlit.io/signup). <br><br>
-<img src="https://user-images.githubusercontent.com/7164864/214965336-64500db3-0d79-4a20-8052-2dda883902d2.gif" width="400"></img>
-
-## Resources
-
-- Explore our [docs](https://docs.streamlit.io) to learn how Streamlit works.
-- Ask questions and get help in our [community forum](https://discuss.streamlit.io).
-- Read our [blog](https://blog.streamlit.io) for tips from developers and creators.
-- Extend Streamlit's capabilities by installing or creating your own [Streamlit Components](https://streamlit.io/components).
-- Help others find and play with your app by using the Streamlit GitHub badge in your repository:
-```markdown
-[![Streamlit App](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](URL_TO_YOUR_APP)
-```
-[![Streamlit App](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://share.streamlit.io/streamlit/roadmap)
-
-## Contribute
-
-🎉 Thanks for your interest in helping improve Streamlit! 🎉
-
-Before contributing, please read our guidelines here: https://github.com/streamlit/streamlit/wiki/Contributing
-
-## License
-
-Streamlit is completely free and open-source and licensed under the [Apache 2.0](https://www.apache.org/licenses/LICENSE-2.0) license.
+> INFO: #subdirectory=lib is needed as the `setup.py` file is located in that subfolder
