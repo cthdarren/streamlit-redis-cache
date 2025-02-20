@@ -1,9 +1,12 @@
-# Streamlit caching documentation
-This readme documents some basic understanding of the streamlit caching mechanism, with further in depth insights into @st.cache_data further down [below](#deep-dive-into-%40st.cache_data). This is mainly because this fork focuses around the modification around the @st.cache_data method to implement redis caching.
+# Streamlit redis implementation and caching documentation
+This fork focuses around the modification around the @st.cache_data method to implement redis caching.
+
+This readme documents some basic understanding of the streamlit caching mechanism, with further in depth insights into @st.cache_data further down [below](#deep-dive-into-%40st.cache_data). 
 
 <br/>
 
 ## Table of Contents
+0. [Setting up this repo](#setting-up-this-repo)
 1. [Key Pointers](#key-pointers)
 2. [@st.cache_data decorator](#%40st.cache_data-decorator)
 3. [@st.cache_resource decorator](#%40st.cache_resource-decorator)
@@ -16,6 +19,20 @@ This readme documents some basic understanding of the streamlit caching mechanis
 8. [Changes made in this fork](#changes-made-in-this-fork)
 9. [Additional Notes](#additional-notes)
 10. [Deployment of your own streamlit fork](#deployment-of-your-own-streamlit-fork)
+
+<br/>
+
+## Setting up this repo
+1. Add the following to your .envs with the respective values:
+    - REDIS_HOST    (host network string)
+    - REDIS_PORT    (port number)
+    - REDIS_DB      (db index number)
+
+> NOTE: If you don't, the defaults are localhost, 6379 and 0 respectively
+
+2. `
+pip install git+https://github.com/cthdarren/streamlit.git@1.42.1#subdirectory=lib
+`
 
 <br/>
 
