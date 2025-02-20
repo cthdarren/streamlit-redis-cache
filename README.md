@@ -8,17 +8,17 @@ This readme documents some basic understanding of the streamlit caching mechanis
 ## Table of Contents
 0. [Setting up this repo](#setting-up-this-repo)
 1. [Key Pointers](#key-pointers)
-2. [@st.cache_data decorator](#%40st.cache_data-decorator)
-3. [@st.cache_resource decorator](#%40st.cache_resource-decorator)
-4. [st.sssion_state](#st.session_state)
-5. [Mutations and Concurrency Issues](#mutations-and-concurrency-issues)
-6. [Summary](#summary)
-7. [Deep Dive into @st.cache_data](#deep-dive-into-%40st.cache_data)
+2. [@st.cache_data decorator](#stcache_data-decorator)
+4. [@st.cache_resource decorator](#stcache_resource-decorator)
+5. [st.session_state](#stsession_state)
+6. [Mutations and Concurrency Issues](#mutations-and-concurrency-issues)
+7. [Summary](#summary)
+8. [Deep Dive into @st.cache_data](#deep-dive-into-stcache_data)
     - [Cache Miss Scenario](#cache-miss-scenario)
     - [Cache Hit Scenario](#cache-hit-scenario)
-8. [Changes made in this fork](#changes-made-in-this-fork)
-9. [Additional Notes](#additional-notes)
-10. [Deployment of your own streamlit fork](#deployment-of-your-own-streamlit-fork)
+9. [Changes made in this fork](#changes-made-in-this-fork)
+10. [Additional Notes](#additional-notes)
+11. [Deployment of your own streamlit fork](#deployment-of-your-own-streamlit-fork)
 
 <br/>
 
