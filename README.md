@@ -31,7 +31,7 @@ This readme documents some basic understanding of the streamlit caching mechanis
 > NOTE: If you don't, the defaults are localhost, 6379 and 0 respectively
 
 2. `
-pip install git+https://github.com/cthdarren/streamlit.git@1.42.1#subdirectory=lib
+pip install git+https://github.com/cthdarren/streamlit-redis-cache.git@1.42.1#subdirectory=lib
 `
 
 <br/>
@@ -187,7 +187,7 @@ There isn't really documentation of how to do this that I could find online, but
 
 Example:
 ```
-pip install git+https://github.com/cthdarren/streamlit.git@1.42.1#subdirectory=lib
+pip install git+https://github.com/cthdarren/streamlit-redis-cache.git@1.42.1#subdirectory=lib
 ```
 > INFO: You can also put this link directly into a requirements.txt file, omitting the pip install part
 
