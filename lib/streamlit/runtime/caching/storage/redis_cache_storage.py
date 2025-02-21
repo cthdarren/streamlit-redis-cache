@@ -68,6 +68,11 @@ class RedisCacheStorage(CacheStorage):
             redis_host: str = os.getenv("REDIS_HOST", "localhost")
             redis_port: int = int(os.getenv("REDIS_PORT", 6379))
             redis_db: int = int(os.getenv("REDIS_DB", 0))
+            redis_password: str | None = os.getenv("REDIS_PASSWORD")
+
+            if redis_password is None:
+                _LOGGER.error("REDIS_PASSWORD env is None. Is it set?")
+                raise ValueError("REDIS_PASSWORD env is None. Is it set?")
         except ValueError:
             _LOGGER.error(
                 "Type mismatch for redis env variables, redis_port and redis_db should be parseable as int"
@@ -77,9 +82,7 @@ class RedisCacheStorage(CacheStorage):
             )
 
         self.conn = redis.Redis(
-            host=redis_host,
-            port=redis_port,
-            db=redis_db,
+            host=redis_host, port=redis_port, db=redis_db, password=redis_password
         )
         _LOGGER.info(self.conn)
 
