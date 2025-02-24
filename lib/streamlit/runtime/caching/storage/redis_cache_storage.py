@@ -70,20 +70,38 @@ class RedisCacheStorage(CacheStorage):
             redis_db: int = int(os.getenv("REDIS_DB", 0))
             redis_password: str | None = os.getenv("REDIS_PASSWORD")
 
-            self.conn = redis.Redis(
-                host=redis_host, port=redis_port, db=redis_db, password=redis_password
-            )
-
-            if redis_password is None:
-                _LOGGER.warning("REDIS_PASSWORD env is None. Is it set?")
-
-
         except ValueError:
-            _LOGGER.warning(
+            redis_host = "localhost"
+            redis_port = 6379
+            redis_db = 0
+            _LOGGER.error(
                 "Type mismatch for redis env variables, redis_port and redis_db should be parseable as int"
             )
-        except:
-            _LOGGER.warning("Failed to get connection to redis host. Check credentials!")
+            raise ValueError(
+                "Type mismatch for redis env variables, redis_port and redis_db should be parseable as int"
+            )
+
+        if redis_password is None:
+            _LOGGER.info(
+                "REDIS_PASSWORD env is None. Connecting to redis server without password..."
+            )
+            self.conn = redis.Redis(
+                host=redis_host,
+                port=redis_port,
+                db=redis_db,
+            )
+        else:
+            try:
+                self.conn = redis.Redis(
+                    host=redis_host,
+                    port=redis_port,
+                    db=redis_db,
+                    password=redis_password
+                )
+            except ConnectionError:
+                _LOGGER.error("Error connecting to redis server with password. Do you \
+                     have a the REDIS_PASSWORD set when your server doesn't require one?")
+
 
     @property
     def ttl_seconds(self) -> float:
