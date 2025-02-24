@@ -58,7 +58,7 @@ const log = getLogger("ComponentInstance")
  * after the component has been created, explain to the user that there
  * may be a problem with their component, and offer troubleshooting advice.
  */
-export const COMPONENT_READY_WARNING_TIME_MS = 60000 // 60 seconds
+export const COMPONENT_READY_WARNING_TIME_MS = 100 // 60 seconds
 
 export interface Props {
   registry: ComponentRegistry
