@@ -109,6 +109,7 @@ class CacheStorageContext:
     ttl_seconds: float | None = None
     max_entries: int | None = None
     persist: Literal["disk", "redis"] | None = None
+    compress: bool = False
 
 
 class CacheStorage(Protocol):

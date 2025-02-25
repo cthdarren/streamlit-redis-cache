@@ -92,6 +92,7 @@ class CachedDataFuncInfo(CachedFuncInfo):
         max_entries: int | None,
         ttl: float | timedelta | str | None,
         hash_funcs: HashFuncsDict | None = None,
+        compress: bool = False
     ):
         super().__init__(
             func,
@@ -101,6 +102,7 @@ class CachedDataFuncInfo(CachedFuncInfo):
         self.persist = persist
         self.max_entries = max_entries
         self.ttl = ttl
+        self.compress = compress
 
         self.validate_params()
 
@@ -124,6 +126,7 @@ class CachedDataFuncInfo(CachedFuncInfo):
             max_entries=self.max_entries,
             ttl=self.ttl,
             display_name=self.display_name,
+            compress = self.compress,
         )
 
     def validate_params(self) -> None:
@@ -155,6 +158,7 @@ class DataCaches(CacheStatsProvider):
         max_entries: int | None,
         ttl: int | float | timedelta | str | None,
         display_name: str,
+        compress: bool,
     ) -> DataCache:
         """Return the mem cache for the given key.
 
@@ -172,6 +176,7 @@ class DataCaches(CacheStatsProvider):
                 and cache.ttl_seconds == ttl_seconds
                 and cache.max_entries == max_entries
                 and cache.persist == persist
+                and cache.compress == compress
             ):
                 return cache
 
@@ -287,6 +292,7 @@ class DataCaches(CacheStatsProvider):
         persist: CachePersistType,
         ttl_seconds: float | None,
         max_entries: int | None,
+        compress: bool,
     ) -> CacheStorageContext:
         return CacheStorageContext(
             function_key=function_key,
@@ -294,6 +300,7 @@ class DataCaches(CacheStatsProvider):
             ttl_seconds=ttl_seconds,
             max_entries=max_entries,
             persist=persist,
+            compress=compress,
         )
 
     def get_storage_manager(self, persist=None) -> CacheStorageManager:
@@ -357,6 +364,7 @@ class CacheDataAPI:
         persist: CachePersistType | bool = None,
         experimental_allow_widgets: bool = False,
         hash_funcs: HashFuncsDict | None = None,
+        compress: bool = False
     ) -> Callable[[F], F]: ...
 
     def __call__(
@@ -369,6 +377,7 @@ class CacheDataAPI:
         persist: CachePersistType | bool = None,
         experimental_allow_widgets: bool = False,
         hash_funcs: HashFuncsDict | None = None,
+        compress: bool = False
     ):
         return self._decorator(
             func,
@@ -378,6 +387,7 @@ class CacheDataAPI:
             show_spinner=show_spinner,
             experimental_allow_widgets=experimental_allow_widgets,
             hash_funcs=hash_funcs,
+            compress=compress
         )
 
     def _decorator(
@@ -390,6 +400,7 @@ class CacheDataAPI:
         persist: CachePersistType | bool,
         experimental_allow_widgets: bool,
         hash_funcs: HashFuncsDict | None = None,
+        compress: bool = False
     ):
         """Decorator to cache functions that return data (e.g. dataframe transforms, database queries, ML inference).
 
@@ -577,6 +588,7 @@ class CacheDataAPI:
                     max_entries=max_entries,
                     ttl=ttl,
                     hash_funcs=hash_funcs,
+                    compress=compress
                 )
             )
 
@@ -591,6 +603,7 @@ class CacheDataAPI:
                 max_entries=max_entries,
                 ttl=ttl,
                 hash_funcs=hash_funcs,
+                compress=compress
             )
         )
 
