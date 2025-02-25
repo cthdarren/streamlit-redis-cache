@@ -16,6 +16,7 @@
 
 from __future__ import annotations
 
+import lz4.frame
 import pickle
 import threading
 import types
@@ -610,6 +611,7 @@ class DataCache(Cache):
         max_entries: int | None,
         ttl_seconds: float | None,
         display_name: str,
+        compress: bool = False
     ):
         super().__init__()
         self.key = key
@@ -618,6 +620,13 @@ class DataCache(Cache):
         self.ttl_seconds = ttl_seconds
         self.max_entries = max_entries
         self.persist = persist
+        self.compress = compress
+
+    def compress_value(self, data):
+        return lz4.frame.compress(data)
+
+    def decompress_value(self, data):
+        return lz4.frame.decompress(data)
 
     def get_stats(self) -> list[CacheStat]:
         if isinstance(self.storage, CacheStatsProvider):
@@ -638,6 +647,10 @@ class DataCache(Cache):
 
         try:
             entry = pickle.loads(pickled_entry)
+
+            if self.compress_value:
+                self.decompress_value(pickled_entry)
+
             if not isinstance(entry, CachedResult):
                 # Loaded an old cache file format, remove it and let the caller
                 # rerun the function.
@@ -656,6 +669,10 @@ class DataCache(Cache):
             main_id = st._main.id
             sidebar_id = st.sidebar.id
             entry = CachedResult(value, messages, main_id, sidebar_id)
+
+            if self.compress:
+                self.compress_value(entry)
+
             pickled_entry = pickle.dumps(entry)
         except (pickle.PicklingError, TypeError) as exc:
             raise CacheError(f"Failed to pickle {key}") from exc
