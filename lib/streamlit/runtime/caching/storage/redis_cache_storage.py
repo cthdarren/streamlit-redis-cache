@@ -146,7 +146,7 @@ class RedisCacheStorage(CacheStorage):
             try:
                 self.conn.set(f"{self.function_key}-{key}", value)
                 if self.ttl_seconds != math.inf:
-                    self.conn.expire(key, self.ttl_seconds)
+                    self.conn.expire(f"{self.function_key}-{key}", self.ttl_seconds)
                 _LOGGER.debug(f"REDIS CACHE WRITTEN: {key}")
             except (ConnectionError, ConnectionRefusedError):
                 _LOGGER.exception(
