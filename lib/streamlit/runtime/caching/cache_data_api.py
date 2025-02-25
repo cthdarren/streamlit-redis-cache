@@ -664,10 +664,11 @@ class DataCache(Cache):
             raise CacheError(str(e)) from e
 
         try:
+            if self.compress:
+                pickled_entry = self.decompress_value(pickled_entry)
+
             entry = pickle.loads(pickled_entry)
 
-            if self.compress:
-                self.decompress_value(pickled_entry)
 
             if not isinstance(entry, CachedResult):
                 # Loaded an old cache file format, remove it and let the caller
@@ -688,10 +689,11 @@ class DataCache(Cache):
             sidebar_id = st.sidebar.id
             entry = CachedResult(value, messages, main_id, sidebar_id)
 
-            if self.compress:
-                self.compress_value(entry)
-
             pickled_entry = pickle.dumps(entry)
+
+            if self.compress:
+                pickled_entry = self.compress_value(pickled_entry)
+
         except (pickle.PicklingError, TypeError) as exc:
             raise CacheError(f"Failed to pickle {key}") from exc
         self.storage.set(key, pickled_entry)
