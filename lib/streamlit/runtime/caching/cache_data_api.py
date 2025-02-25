@@ -61,9 +61,7 @@ from streamlit.runtime.caching.storage import (
 from streamlit.runtime.caching.storage.cache_storage_protocol import (
     InvalidCacheStorageContext,
 )
-from streamlit.runtime.caching.storage.dummy_cache_storage import (
-    MemoryCacheStorageManager,
-)
+from streamlit.runtime.caching.storage.redis_cache_storage import RedisCacheStorageManager
 from streamlit.runtime.metrics_util import gather_metrics
 from streamlit.runtime.stats import CacheStat, CacheStatsProvider, group_stats
 from streamlit.time_util import time_to_seconds
@@ -317,8 +315,8 @@ class DataCaches(CacheStatsProvider):
         else:
             # When running in "raw mode", we can't access the CacheStorageManager,
             # so we're falling back to InMemoryCache.
-            _LOGGER.warning("No runtime found, using MemoryCacheStorageManager")
-            return MemoryCacheStorageManager()
+            # _LOGGER.warning("No runtime found, using MemoryCacheStorageManager")
+            return RedisCacheStorageManager()
 
 
 # Singleton DataCaches instance
