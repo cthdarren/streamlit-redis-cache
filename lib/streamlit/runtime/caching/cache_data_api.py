@@ -209,6 +209,7 @@ class DataCaches(CacheStatsProvider):
                 ttl_seconds=ttl_seconds,
                 max_entries=max_entries,
                 persist=persist,
+                compress=compress
             )
             cache_storage_manager = self.get_storage_manager(persist)
             storage = cache_storage_manager.create(cache_context)
@@ -220,6 +221,7 @@ class DataCaches(CacheStatsProvider):
                 max_entries=max_entries,
                 ttl_seconds=ttl_seconds,
                 display_name=display_name,
+                compress=compress,
             )
             self._function_caches[key] = cache
             return cache
@@ -664,7 +666,7 @@ class DataCache(Cache):
         try:
             entry = pickle.loads(pickled_entry)
 
-            if self.compress_value:
+            if self.compress:
                 self.decompress_value(pickled_entry)
 
             if not isinstance(entry, CachedResult):
