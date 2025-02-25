@@ -141,6 +141,7 @@ class CachedDataFuncInfo(CachedFuncInfo):
             persist=self.persist,
             max_entries=self.max_entries,
             ttl=self.ttl,
+            compress=self.compress
         )
 
 
@@ -255,6 +256,7 @@ class DataCaches(CacheStatsProvider):
         persist: CachePersistType,
         max_entries: int | None,
         ttl: int | float | timedelta | str | None,
+        compress: bool
     ) -> None:
         """Validate that the cache params are valid for given storage.
 
@@ -273,6 +275,7 @@ class DataCaches(CacheStatsProvider):
             ttl_seconds=ttl_seconds,
             max_entries=max_entries,
             persist=persist,
+            compress=compress
         )
         try:
             self.get_storage_manager(persist).check_context(cache_context)
