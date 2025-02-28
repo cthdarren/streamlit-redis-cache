@@ -40,7 +40,12 @@ class RedisCacheStorageManager(CacheStorageManager):
             redis_host: str = os.getenv("REDIS_HOST", "localhost")
             redis_port: int = int(os.getenv("REDIS_PORT", 6379))
             redis_db: int = int(os.getenv("REDIS_DB", 0))
+            redis_password: str | None = os.getenv("REDIS_PASSWORD")
+
         except ValueError:
+            redis_host = "localhost"
+            redis_port = 6379
+            redis_db = 0
             _LOGGER.error(
                 "Type mismatch for redis env variables, redis_port and redis_db should be parseable as int"
             )
@@ -48,13 +53,28 @@ class RedisCacheStorageManager(CacheStorageManager):
                 "Type mismatch for redis env variables, redis_port and redis_db should be parseable as int"
             )
 
-        self.conn = redis.Redis(
-            host=redis_host,
-            port=redis_port,
-            db=redis_db,
-        )
-        _LOGGER.info(self.conn)
-        return RedisCacheStorage(context=context, conn=self.conn)
+        if redis_password is None:
+            _LOGGER.info(
+                "REDIS_PASSWORD env is None. Connecting to redis server without password..."
+            )
+            self.conn = redis.Redis(
+                host=redis_host,
+                port=redis_port,
+                db=redis_db,
+            )
+        else:
+            try:
+                self.conn = redis.Redis(
+                    host=redis_host,
+                    port=redis_port,
+                    db=redis_db,
+                    password=redis_password
+                )
+            except ConnectionError:
+                _LOGGER.error("Error connecting to redis server with password. Do you \
+                     have a the REDIS_PASSWORD set when your server doesn't require one?")
+
+            return RedisCacheStorage(context=context, conn=self.conn)
 
     def clear_all(self) -> None:
         """Delete all keys from redis by running the flushdb command"""
