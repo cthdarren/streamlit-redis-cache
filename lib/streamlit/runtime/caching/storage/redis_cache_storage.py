@@ -19,7 +19,7 @@ import os
 from typing import Final
 
 import redis
-from redis.exceptions import ConnectionError
+from redis.exceptions import ConnectionError, AuthenticationError
 
 from streamlit.logger import get_logger
 from streamlit.runtime.caching.storage.cache_storage_protocol import (
@@ -53,28 +53,22 @@ class RedisCacheStorageManager(CacheStorageManager):
                 "Type mismatch for redis env variables, redis_port and redis_db should be parseable as int"
             )
 
-        if redis_password is None:
-            _LOGGER.info(
-                "REDIS_PASSWORD env is None. Connecting to redis server without password..."
-            )
+        try:
             self.conn = redis.Redis(
                 host=redis_host,
                 port=redis_port,
                 db=redis_db,
+                password=redis_password
             )
-        else:
-            try:
-                self.conn = redis.Redis(
-                    host=redis_host,
-                    port=redis_port,
-                    db=redis_db,
-                    password=redis_password
-                )
-            except ConnectionError:
-                _LOGGER.error("Error connecting to redis server with password. Do you \
-                     have a the REDIS_PASSWORD set when your server doesn't require one?")
+        except AuthenticationError:
+            _LOGGER.error("Authentication with redis server failed! Check if your \
+                password is set/correct")
 
-            return RedisCacheStorage(context=context, conn=self.conn)
+        except ConnectionError:
+            _LOGGER.error("Error connecting to redis server with password. Do you \
+                 have a the REDIS_PASSWORD set when your server doesn't require one?")
+
+        return RedisCacheStorage(context=context, conn=self.conn)
 
     def clear_all(self) -> None:
         """Delete all keys from redis by running the flushdb command"""
