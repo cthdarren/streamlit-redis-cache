@@ -36,34 +36,6 @@ _LOGGER: Final = get_logger(__name__)
 class RedisCacheStorageManager(CacheStorageManager):
     def create(self, context: CacheStorageContext) -> CacheStorage:
         """Skip the inmemorycache, directly hit redis server on every call"""
-        return RedisCacheStorage(context=context)
-
-    def clear_all(self) -> None:
-        pass
-
-    def check_context(self, context: CacheStorageContext) -> None:
-        if (
-            context.persist == "disk"
-            and context.ttl_seconds is not None
-            and not math.isinf(context.ttl_seconds)
-        ):
-            _LOGGER.warning(
-                f"The cached function '{context.function_display_name}' has a TTL "
-                "that will be ignored. Persistent cached functions currently don't "
-                "support TTL."
-            )
-
-
-class RedisCacheStorage(CacheStorage):
-    """Cache storage that persists data to redis"""
-
-    def __init__(self, context: CacheStorageContext):
-        self.function_key = context.function_key
-        self.persist = context.persist
-        self._ttl_seconds = context.ttl_seconds
-        # TODO: Possibly unneeded
-        # self._max_entries = context.max_entries
-
         try:
             redis_host: str = os.getenv("REDIS_HOST", "localhost")
             redis_port: int = int(os.getenv("REDIS_PORT", 6379))
@@ -82,6 +54,43 @@ class RedisCacheStorage(CacheStorage):
             db=redis_db,
         )
         _LOGGER.info(self.conn)
+        return RedisCacheStorage(context=context, conn=self.conn)
+
+    def clear_all(self) -> None:
+        """Delete all keys from redis by running the flushdb command"""
+        try:
+            self.conn.execute_command("flushdb")
+        except ConnectionError as ex:
+            _LOGGER.exception(
+                "Error connecting to Redis server. Is it currently running?"
+            )
+            raise CacheStorageError(
+                "Error connecting to Redis server. Is it currently running?"
+            ) from ex
+        except Exception as ex:
+            _LOGGER.exception("Unable to clear redis cache", exc_info=ex)
+
+    def check_context(self, context: CacheStorageContext) -> None:
+        if (
+            context.persist == "disk"
+            and context.ttl_seconds is not None
+            and not math.isinf(context.ttl_seconds)
+        ):
+            _LOGGER.warning(
+                f"The cached function '{context.function_display_name}' has a TTL "
+                "that will be ignored. Persistent cached functions currently don't "
+                "support TTL."
+            )
+
+
+class RedisCacheStorage(CacheStorage):
+    """Cache storage that persists data to redis"""
+
+    def __init__(self, context: CacheStorageContext, conn):
+        self.function_key = context.function_key
+        self.persist = context.persist
+        self._ttl_seconds = context.ttl_seconds
+        self.conn = conn
 
     @property
     def ttl_seconds(self) -> float:
@@ -135,9 +144,6 @@ class RedisCacheStorage(CacheStorage):
                 # Don't raise because we don't want the server to crash, but
                 # to just run the function on each call regardless if the server is unreachable
 
-                # raise CacheStorageError(
-                #     "Error connecting to Redis server. Is it currently running?"
-                # ) from ex
             except Exception as ex:
                 _LOGGER.exception("Unable to write to cache", exc_info=ex)
                 raise CacheStorageError("Unable to write to cache") from ex
@@ -162,10 +168,12 @@ class RedisCacheStorage(CacheStorage):
                 )
 
     def clear(self) -> None:
-        """Delete all keys from redis by running the flushdb command"""
+        """Clears a specific function cache by removing all keys that begin with that
+        function key """
         if self.persist == "redis":
             try:
-                self.conn.execute_command("flushdb")
+                for key in self.conn.scan_iter(f"prefix:{self.function_key}"):
+                    self.conn.delete(key)
             except ConnectionError as ex:
                 _LOGGER.exception(
                     "Error connecting to Redis server. Is it currently running?"
@@ -174,7 +182,9 @@ class RedisCacheStorage(CacheStorage):
                     "Error connecting to Redis server. Is it currently running?"
                 ) from ex
             except Exception as ex:
-                _LOGGER.exception("Unable to clear redis cache", exc_info=ex)
+                _LOGGER.exception(
+                    "Unable to remove a file from the redis cache", exc_info=ex
+                )
 
     def close(self) -> None:
         """Dummy implementation of close, we don't need to actually "close" anything"""
