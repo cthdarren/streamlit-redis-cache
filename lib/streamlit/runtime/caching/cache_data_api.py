@@ -224,7 +224,7 @@ class DataCaches(CacheStatsProvider):
             self._function_caches[key] = cache
             return cache
 
-    def clear_all(self) -> None:
+    def clear_all(self, storageType = None) -> None:
         """Clear all in-memory and on-disk caches."""
         with self._caches_lock:
             try:
@@ -232,7 +232,7 @@ class DataCaches(CacheStatsProvider):
                 # storage manager clear_all method;
                 # if not implemented, fallback to remove all
                 # available storages one by one
-                self.get_storage_manager().clear_all()
+                self.get_storage_manager(storageType).clear_all()
             except NotImplementedError:
                 for data_cache in self._function_caches.values():
                     data_cache.clear()
@@ -611,9 +611,9 @@ class CacheDataAPI:
         )
 
     @gather_metrics("clear_data_caches")
-    def clear(self) -> None:
+    def clear(self, storageType = None) -> None:
         """Clear all in-memory and on-disk data caches."""
-        _data_caches.clear_all()
+        _data_caches.clear_all(storageType)
 
 
 class DataCache(Cache):
