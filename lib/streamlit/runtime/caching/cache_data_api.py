@@ -16,6 +16,7 @@
 
 from __future__ import annotations
 
+import lz4.frame
 import pickle
 import threading
 import types
@@ -60,9 +61,7 @@ from streamlit.runtime.caching.storage import (
 from streamlit.runtime.caching.storage.cache_storage_protocol import (
     InvalidCacheStorageContext,
 )
-from streamlit.runtime.caching.storage.dummy_cache_storage import (
-    MemoryCacheStorageManager,
-)
+from streamlit.runtime.caching.storage.redis_cache_storage import RedisCacheStorageManager
 from streamlit.runtime.metrics_util import gather_metrics
 from streamlit.runtime.stats import CacheStat, CacheStatsProvider, group_stats
 from streamlit.time_util import time_to_seconds
@@ -91,6 +90,7 @@ class CachedDataFuncInfo(CachedFuncInfo):
         max_entries: int | None,
         ttl: float | timedelta | str | None,
         hash_funcs: HashFuncsDict | None = None,
+        compress: bool = False
     ):
         super().__init__(
             func,
@@ -100,6 +100,7 @@ class CachedDataFuncInfo(CachedFuncInfo):
         self.persist = persist
         self.max_entries = max_entries
         self.ttl = ttl
+        self.compress = compress
 
         self.validate_params()
 
@@ -123,6 +124,7 @@ class CachedDataFuncInfo(CachedFuncInfo):
             max_entries=self.max_entries,
             ttl=self.ttl,
             display_name=self.display_name,
+            compress = self.compress,
         )
 
     def validate_params(self) -> None:
@@ -137,6 +139,7 @@ class CachedDataFuncInfo(CachedFuncInfo):
             persist=self.persist,
             max_entries=self.max_entries,
             ttl=self.ttl,
+            compress=self.compress
         )
 
 
@@ -154,6 +157,7 @@ class DataCaches(CacheStatsProvider):
         max_entries: int | None,
         ttl: int | float | timedelta | str | None,
         display_name: str,
+        compress: bool,
     ) -> DataCache:
         """Return the mem cache for the given key.
 
@@ -171,6 +175,7 @@ class DataCaches(CacheStatsProvider):
                 and cache.ttl_seconds == ttl_seconds
                 and cache.max_entries == max_entries
                 and cache.persist == persist
+                and cache.compress == compress
             ):
                 return cache
 
@@ -202,6 +207,7 @@ class DataCaches(CacheStatsProvider):
                 ttl_seconds=ttl_seconds,
                 max_entries=max_entries,
                 persist=persist,
+                compress=compress
             )
             cache_storage_manager = self.get_storage_manager(persist)
             storage = cache_storage_manager.create(cache_context)
@@ -213,6 +219,7 @@ class DataCaches(CacheStatsProvider):
                 max_entries=max_entries,
                 ttl_seconds=ttl_seconds,
                 display_name=display_name,
+                compress=compress,
             )
             self._function_caches[key] = cache
             return cache
@@ -249,6 +256,7 @@ class DataCaches(CacheStatsProvider):
         persist: CachePersistType,
         max_entries: int | None,
         ttl: int | float | timedelta | str | None,
+        compress: bool
     ) -> None:
         """Validate that the cache params are valid for given storage.
 
@@ -267,6 +275,7 @@ class DataCaches(CacheStatsProvider):
             ttl_seconds=ttl_seconds,
             max_entries=max_entries,
             persist=persist,
+            compress=compress
         )
         try:
             self.get_storage_manager(persist).check_context(cache_context)
@@ -286,6 +295,7 @@ class DataCaches(CacheStatsProvider):
         persist: CachePersistType,
         ttl_seconds: float | None,
         max_entries: int | None,
+        compress: bool,
     ) -> CacheStorageContext:
         return CacheStorageContext(
             function_key=function_key,
@@ -293,6 +303,7 @@ class DataCaches(CacheStatsProvider):
             ttl_seconds=ttl_seconds,
             max_entries=max_entries,
             persist=persist,
+            compress=compress,
         )
 
     def get_storage_manager(self, persist=None) -> CacheStorageManager:
@@ -304,8 +315,8 @@ class DataCaches(CacheStatsProvider):
         else:
             # When running in "raw mode", we can't access the CacheStorageManager,
             # so we're falling back to InMemoryCache.
-            _LOGGER.warning("No runtime found, using MemoryCacheStorageManager")
-            return MemoryCacheStorageManager()
+            # _LOGGER.warning("No runtime found, using MemoryCacheStorageManager")
+            return RedisCacheStorageManager()
 
 
 # Singleton DataCaches instance
@@ -356,6 +367,7 @@ class CacheDataAPI:
         persist: CachePersistType | bool = None,
         experimental_allow_widgets: bool = False,
         hash_funcs: HashFuncsDict | None = None,
+        compress: bool = False
     ) -> Callable[[F], F]: ...
 
     def __call__(
@@ -368,6 +380,7 @@ class CacheDataAPI:
         persist: CachePersistType | bool = None,
         experimental_allow_widgets: bool = False,
         hash_funcs: HashFuncsDict | None = None,
+        compress: bool = False
     ):
         return self._decorator(
             func,
@@ -377,6 +390,7 @@ class CacheDataAPI:
             show_spinner=show_spinner,
             experimental_allow_widgets=experimental_allow_widgets,
             hash_funcs=hash_funcs,
+            compress=compress
         )
 
     def _decorator(
@@ -389,6 +403,7 @@ class CacheDataAPI:
         persist: CachePersistType | bool,
         experimental_allow_widgets: bool,
         hash_funcs: HashFuncsDict | None = None,
+        compress: bool = False
     ):
         """Decorator to cache functions that return data (e.g. dataframe transforms, database queries, ML inference).
 
@@ -576,6 +591,7 @@ class CacheDataAPI:
                     max_entries=max_entries,
                     ttl=ttl,
                     hash_funcs=hash_funcs,
+                    compress=compress
                 )
             )
 
@@ -590,6 +606,7 @@ class CacheDataAPI:
                 max_entries=max_entries,
                 ttl=ttl,
                 hash_funcs=hash_funcs,
+                compress=compress
             )
         )
 
@@ -610,6 +627,7 @@ class DataCache(Cache):
         max_entries: int | None,
         ttl_seconds: float | None,
         display_name: str,
+        compress: bool = False
     ):
         super().__init__()
         self.key = key
@@ -618,6 +636,13 @@ class DataCache(Cache):
         self.ttl_seconds = ttl_seconds
         self.max_entries = max_entries
         self.persist = persist
+        self.compress = compress
+
+    def compress_value(self, data):
+        return lz4.frame.compress(data)
+
+    def decompress_value(self, data):
+        return lz4.frame.decompress(data)
 
     def get_stats(self) -> list[CacheStat]:
         if isinstance(self.storage, CacheStatsProvider):
@@ -637,7 +662,12 @@ class DataCache(Cache):
             raise CacheError(str(e)) from e
 
         try:
+            if self.compress:
+                pickled_entry = self.decompress_value(pickled_entry)
+
             entry = pickle.loads(pickled_entry)
+
+
             if not isinstance(entry, CachedResult):
                 # Loaded an old cache file format, remove it and let the caller
                 # rerun the function.
@@ -656,7 +686,12 @@ class DataCache(Cache):
             main_id = st._main.id
             sidebar_id = st.sidebar.id
             entry = CachedResult(value, messages, main_id, sidebar_id)
+
             pickled_entry = pickle.dumps(entry)
+
+            if self.compress:
+                pickled_entry = self.compress_value(pickled_entry)
+
         except (pickle.PicklingError, TypeError) as exc:
             raise CacheError(f"Failed to pickle {key}") from exc
         self.storage.set(key, pickled_entry)
