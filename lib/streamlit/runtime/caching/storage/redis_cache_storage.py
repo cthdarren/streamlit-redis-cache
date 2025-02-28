@@ -78,9 +78,6 @@ class RedisCacheStorageManager(CacheStorageManager):
             _LOGGER.exception(
                 "Error connecting to Redis server. Is it currently running?"
             )
-            raise CacheStorageError(
-                "Error connecting to Redis server. Is it currently running?"
-            ) from ex
         except Exception as ex:
             _LOGGER.exception("Unable to clear redis cache", exc_info=ex)
 
@@ -123,12 +120,20 @@ class RedisCacheStorage(CacheStorage):
         """
         if self.persist == "redis":
             try:
-                value = self.conn.get(key)
+                value = self.conn.get(f"{self.function_key}-{key}")
                 _LOGGER.debug(f"REDIS CACHE HIT: {key}")
                 if value is None:
                     raise CacheStorageKeyNotFoundError("Key not found in redis cache")
                 return bytes(value)
-            except ConnectionError as ex:
+
+            except AuthenticationError:
+                _LOGGER.error("Authentication with redis server failed! Check if your \
+password is set/correct")
+                raise CacheStorageKeyNotFoundError(
+                    "Error connecting to Redis server. Is it currently running?"
+                )
+
+            except (ConnectionError, ConnectionRefusedError) as ex:
                 _LOGGER.exception(
                     "Error connecting to Redis server. Is it currently running?"
                 )
@@ -147,11 +152,16 @@ class RedisCacheStorage(CacheStorage):
         """Sets the value for a given key"""
         if self.persist == "redis":
             try:
-                self.conn.set(key, value)
+                self.conn.set(f"{self.function_key}-{key}", value)
                 if self.ttl_seconds != math.inf:
-                    self.conn.expire(key, self.ttl_seconds)
+                    self.conn.expire(f"{self.function_key}-{key}", self.ttl_seconds)
                 _LOGGER.debug(f"REDIS CACHE WRITTEN: {key}")
-            except ConnectionError:
+
+            except AuthenticationError:
+                _LOGGER.error("Authentication with redis server failed! Check if your \
+password is set/correct")
+
+            except (ConnectionError, ConnectionRefusedError):
                 _LOGGER.exception(
                     "Error connecting to Redis server. Is it currently running?"
                 )
@@ -169,6 +179,14 @@ class RedisCacheStorage(CacheStorage):
         if self.persist == "redis":
             try:
                 self.conn.delete(key)
+
+            except AuthenticationError:
+                _LOGGER.error("Authentication with redis server failed! Check if your \
+password is set/correct")
+                raise CacheStorageKeyNotFoundError(
+                    "Error connecting to Redis server. Is it currently running?"
+                )
+
             except ConnectionError as ex:
                 _LOGGER.exception(
                     "Error connecting to Redis server. Is it currently running?"
@@ -188,17 +206,19 @@ class RedisCacheStorage(CacheStorage):
             try:
                 for key in self.conn.scan_iter(f"prefix:{self.function_key}"):
                     self.conn.delete(key)
+
+            except AuthenticationError:
+                _LOGGER.error("Authentication with redis server failed! Check if your \
+password is set/correct")
+
             except ConnectionError as ex:
                 _LOGGER.exception(
                     "Error connecting to Redis server. Is it currently running?"
                 )
-                raise CacheStorageError(
-                    "Error connecting to Redis server. Is it currently running?"
-                ) from ex
             except Exception as ex:
                 _LOGGER.exception(
                     "Unable to remove a file from the redis cache", exc_info=ex
                 )
 
     def close(self) -> None:
-        """Dummy implementation of close, we don't need to actually "close" anything"""
+         """Dummy implementation of close, we don't need to actually "close" anything"""
