@@ -178,7 +178,7 @@ password is set/correct")
         """
         if self.persist == "redis":
             try:
-                self.conn.delete(key)
+                self.conn.delete(f"{self.function_key}-{key}")
 
             except AuthenticationError:
                 _LOGGER.error("Authentication with redis server failed! Check if your \
